@@ -1,5 +1,5 @@
 # EXERION
-KiCAD PCB schematic & FPGA core for the MiSTer platform written by Anton Gale.
+KiCAD PCB schematic & FPGA core for the MiSTer platform developed by Anton Gale.
 
 This was my first foray into FPGA programming and it has proven to be a very rewarding process.
 
