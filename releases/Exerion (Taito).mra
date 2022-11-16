@@ -16,7 +16,7 @@
 		<dip bits="13,14" name="Difficulty" ids="EASY,Hard,Harder,Hardest"/>
 		<dip bits="16,18" name="Credit" ids="1 Coin/1 Play,1 Coin/2 Play,1 Coin/3 Play,1 Coin/4 Play,2 Coin/1 Play,3 Coin/1 Play,4 Coin/1 Play,5 Coin/1 Play"/>
 	</switches>
-	<rom index="0" md5="none" zip="exerion.zip" type="merged|nonmerged">
+	<rom index="0" md5="none" zip="exerion.zip|exeriont.zip" type="merged|nonmerged">
 		<part crc="790595b8" name="exerion.03"/>
 		<part crc="d7abd0b9" name="exerion.04"/>
 		<part crc="5bb755cb" name="exerion.01"/>
