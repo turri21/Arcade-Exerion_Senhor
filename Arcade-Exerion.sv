@@ -285,7 +285,9 @@ localparam CONF_STR = {
 	"-;",
 	"R0,Reset;",
 	"J1,Fire,Fast Fire,Start 1P,Start 2P,Coin,Pause;",
-	//"Jn,A,B,Start,Select;",
+	"v,0;", // [optional] config version 0-99. 
+	        // If CONF_STR options are changed in incompatible way, then change version number too,
+		  // so all options will get default values on first start.
 	"V,v",`BUILD_DATE
 };
 
