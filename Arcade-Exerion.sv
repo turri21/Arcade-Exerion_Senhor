@@ -347,7 +347,7 @@ wire clkm_20MHZ,clkSP_20MHz;
 wire clk_333M;
 wire clk_sys=clkm_20MHZ;
 wire clk_vid;//=clkm_20MHZ;
-reg ce_pix;
+//reg ce_pix;
 
 pll pll(
 		.refclk(CLK_50M),  			// refclk.clk FPGA_CLK1_50
@@ -397,6 +397,7 @@ arcade_video #(320,8) arcade_video //  8 : 3R 3G 2B
 (
 	.*,
 	.clk_video(clk_vid),
+	.ce_pix(core_pix_clk),
 	.RGB_in(rgb),
 	.HBlank(hblank),
 	.VBlank(vblank),
@@ -462,6 +463,7 @@ exerion_fpga excore(
 	.RED(r),
 	.GREEN(g),
 	.BLUE(b),
+	.core_pix_clk(core_pix_clk),		//from fpga core to sv			
 	.H_SYNC(hs),
 	.V_SYNC(vs),
 	.H_BLANK(hblank),

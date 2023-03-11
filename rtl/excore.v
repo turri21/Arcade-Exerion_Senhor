@@ -19,6 +19,7 @@ module exerion_fpga(
 	output [2:0] RED,     	//from fpga core to sv
 	output [2:0] GREEN,		//from fpga core to sv
 	output [1:0] BLUE,		//from fpga core to sv
+	output core_pix_clk,		//from fpga core to sv	
 	output H_SYNC,				//from fpga core to sv
 	output V_SYNC,				//from fpga core to sv
 	output H_BLANK,
@@ -249,6 +250,7 @@ ls107 U3B_A(
 //coin input
 wire nCOIN;
 
+assign core_pix_clk=clk2_6MHZ;
 
 //coin
 ttl_7474 #(.BLOCKS(1), .DELAY_RISE(0), .DELAY_FALL(0)) U1D_A (
