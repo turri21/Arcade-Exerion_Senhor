@@ -374,7 +374,7 @@ wire m_pause  		= joystick_0[9];
 always @(posedge clk_vid) begin
 	reg [1:0] div;
 	div <= div + (forced_scandoubler ? 2'd1 : 2'd2);
-	ce_pix <= !div;
+	//ce_pix <= !div;
 end
 
 ///////////////////   VIDEO   ////////////////////
