@@ -32,8 +32,8 @@ module exerion_fpga(
 	input [24:0] dn_addr,
 	input 		 dn_wr,
 	input [7:0]  dn_data,
-	output reg [15:0] audio_l, //from jt49_1 .sound
-	output reg [15:0] audio_r,  //from jt49_2 .sound
+	output [15:0] audio_l, //from jt49_1 .sound
+	output [15:0] audio_r,  //from jt49_2 .sound
 	input [15:0] hs_address,
 	output [7:0] hs_data_out,
 	input [7:0] hs_data_in,
@@ -53,12 +53,6 @@ wire [8:0] pixelbusH;
 wire [7:0] pixelbusV;
 wire [10:0] vramaddr;
 wire RAMA_WR,RAMB_WR; 
-
-wire VID_A,VID_B; 		//layer selection bits
-
-wire ZA3,ZA2,ZA1,ZA0;	//layer A output (tile)
-reg  ZB3,ZB2,ZB1,ZB0;	//layer B output (sprite)
-wire ZC3,ZC2,ZC1,ZC0;	//layer C output (background)
 
 wire 	U7L_Q3,U7L_Q2,U7L_Q1,U7L_Q0;
 wire 	U8K_1,U8K_2;
@@ -200,53 +194,8 @@ wire Z80_MREQ,Z80_WR,Z80_RD;
 wire Z80B_MREQ,Z80B_WR,Z80B_RD;
 reg Z80_DO_En;
 
-wire bgclk_6, bgclk_3;
-wire bgclk_6_1,bgclk_6_2;
-
-not (bgclk_6,U3A_Aq); 
-buf (bgclk_3,U3B_Bnq);
-
-//background clocks
-ls107 U3A_B(
-   .clear(PUR), 
-   .clk(clkm_20MHZ), 
-   .j(U3A_Anq|!PUR), 
-   .k(U3A_Anq|!PUR), 
-   .q(U3A_Bq), 
-   .qnot(U3A_Bnq),
-	.q_immediate(U3A_Bqi)
-);
-
-ls107 U3A_A(
-   .clear(PUR), 
-   .clk(clkm_20MHZ), 
-   .j(U3A_Bqi), 
-   .k(PUR), 
-   .q(U3A_Aq), 
-   .qnot(U3A_Anq),
-	.q_immediate(U3A_Aqi)
-);
-
-ls107 U3B_B(
-   .clear(PUR), 
-   .clk(clkm_20MHZ), 
-   .j(U3A_Aqi), 
-   .k(U3A_Aqi), 
-   .q(U3B_Bq), 
-   .qnot(U3B_Bnq),
-	.q_immediate(U3B_Bqi)
-);
-
-ls107 U3B_A(
-   .clear(PUR), 
-   .clk(clkm_20MHZ), 
-   .j(PUR), 
-   .k(PUR), 
-   .q(U3B_Aq), 
-   .qnot(U3B_Anq),
-	.q_immediate(U3B_Aqi)
-);
-
+wire clk2_6MHZ, clk3_3MHZ;
+wire clk2_6MHZ_1,clk2_6MHZ_2;
 //coin input
 wire nCOIN;
 
@@ -297,7 +246,7 @@ T80as Z80B(
 	.INT_n(PUR),
 	.BUSRQ_n(PUR),
 	.NMI_n(PUR),
-	.CLK_n(bgclk_3), //bgclk_3
+	.CLK_n(clk3_3MHZ), //clk3_3MHZ
 	.MREQ_n(Z80B_MREQ),
 	.DI(Z80B_databus_in),
 	.DO(Z80B_databus_out),
@@ -366,25 +315,16 @@ always @(posedge clk3_3MHZ) begin
 end
 
 // *************** SECOND CPU IC SELECTION LOGIC FOR BACKGROUND GRAPHICS *****************
-always @(posedge bgclk_3) begin
+always @(posedge clk3_3MHZ) begin
 			
 	rZ80B_databus_in <= 			(!BG_PROM & !Z80B_MREQ) 				? bg_prom_prog2_out:
 										(!Z80B_RD & !BG_RAM)    				? U4V_Z80B_RAM_out:
 										(!Z80B_RD & !BG_IO2)   					? Z80A_IO2:
 										(!Z80B_RD & !BG_VDSP)					? ({1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,nVDSP,SNHI}):
 																						8'b00000000;
-
-//	nHDSP <= H_BLANK;
-//	nVDSP <= V_BLANK;
-//	wait_n <= !pause; 
 end
 
 wire wait_n = !pause;
-wire nVDSP = V_BLANK; 
-wire nHDSP = H_BLANK; //vertical & horizontal display
-
-
-
 wire SLSE;
 wire CDCK, SLD11, SLD10, SLD9, SLD8, SLD7, SLD6, SLD5, SLD4, SLD3, SLD2, SLD1, SLD0;
 wire U8E_Q7,U8E_Q6,U8E_Q5;
@@ -441,7 +381,7 @@ prom6301_3L U3L(
 	.addr({U3K_Q[7:4],U4KJ_Q[1:0],U4ML_2,U4ML_1}),
 	.clk(clkm_20MHZ),  ///clkm_20MHZ
 	.n_cs(1'b0), 
-	.q({ZC3,ZC2,ZC1,ZC0})
+	.q(ZC)
 );
 
 //CPUB (background layer) external I/O chip selects
@@ -635,40 +575,57 @@ top_74ls153 U8K(
 	 .Y2(U8K_2)
 );
 
-//forground / text / bullet layer output
+//foreground / text / bullet layer output
 prom6301_L8 UL8(
 	.addr({U8L_A7,U8L_A6,U8K_2,U8K_1,U7L_Q3,U7L_Q2,U7L_Q1,U7L_Q0}),
 	.clk(clkm_20MHZ),
 	.n_cs(1'b0), 
-	.q({ZA3,ZA2,ZA1,ZA0})
+	.q(ZA)
 );
 
-wire clrR0,clrR1,clrR2;
-wire clrG0,clrG1,clrG2;
-wire clrB0,clrB1;
-wire [3:0] clr_addr; //U2E_Y1,U2E_Y2,U2D_Y1,U2D_Y2;
+reg nVDSP,nHDSP;
+assign H_BLANK = nHDSP;
+assign V_BLANK = nVDSP;
+reg  [4:0] clr_addr,sp_clr_addr,bg_clr_addr;
+wire [3:0] ZA;
+reg  [3:0] ZB;
+wire [3:0] ZC;
 
 //select layer with priority
-mux4_4n U2ED(
-    .EN_n(nHDSP|nVDSP), //nHDSP|nVDSP
-	 .A(VID_B),
-	 .B(VID_A),
-    .D0({ZC3,ZC2,ZC1,ZC0}), 
-	 .D1({ZB3,ZB2,ZB1,ZB0}), 
-	 .D2({ZA3,ZA2,ZA1,ZA0}), 
-	 .D3({ZA3,ZA2,ZA1,ZA0}),
-    .Y(clr_addr)
-);
 
-assign VID_A = U8K_1|U8K_2;		//tile map layer active (bullets & text)
-assign VID_B = ZB3|ZB2|ZB1|ZB0;	//sprite layer active
+ always @(posedge spclk2_6MHZ) begin
+	//equivalent of VID_B.  If the 5th bit is used the upper part of the pallet ROM is
+	//utilized and the sprite layer is selected.
+	sp_clr_addr <= (ZB[3:0]) 		? 	{1'b1,ZB[3:0]}	: 5'b00000;
+ end
+ 
+ always @(posedge clk2_6MHZ) begin
 
+	//the background layer is drawn when a background pixel is present.  The
+	//background layer uses the bottom half of the pallet ROM (darker shades)
+	bg_clr_addr <= (ZC[3:0])		? 	{1'b0,ZC[3:0]}	: 5'b00000;
+ end
+ 
+ //send synchronized pixel to the screen
+ always @(posedge clk2_6MHZ) begin 
+
+	nHDSP <= pixH<90 | pixH>437; //horizontal blanking
+	nVDSP <= pixV<16 | pixV>239;  //vertical blanking
+
+	
+	//set color of pixel with the following priority: Forground, Sprites, Background
+	clr_addr <= 	(nHDSP|nVDSP) 			? 	 5'b00000     	:
+						(ZA[3:0])				? 	{1'b1,ZA[3:0]} :
+						(sp_clr_addr[4]) 		? 	sp_clr_addr 	:	bg_clr_addr;
+
+ end 
+	 
 //colour prom
 prom6331_E1 UE1(
-	.addr({VID_A|VID_B,clr_addr}),
+	.addr(clr_addr),
 	.clk(clkm_20MHZ),
 	.n_cs(1'b0),
-	.q({clrB1,clrB0,clrG2,clrG1,clrG0,clrR2,clrR1,clrR0})
+	.q({BLUE,GREEN,RED})
 );
 
 reg rVGA_HS;
@@ -944,7 +901,7 @@ always @(posedge sp11_CK) spramaddrb_11_cnt = spramaddrb_11_up;
 wire [3:0] spram_out_10;
 wire [3:0] spram_out_11;
 
-always @(posedge spclk4_6BMHZ) {ZB3,ZB2,ZB1,ZB0} <= (sppixV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
+always @(posedge spclk4_6BMHZ) {ZB} <= (sppixV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
 
 always @(negedge spclk1_10MHZ) begin
 	U10nRCO<=!(spramaddr_cnt[0]&spramaddr_cnt[1]&spramaddr_cnt[2]&spramaddr_cnt[3]);
@@ -1040,31 +997,56 @@ wire [9:0] pre_sndr;
 wire [7:0] ay12F_araw, ay12F_braw, ay12F_craw;
 wire [7:0] ay12V_araw, ay12V_braw, ay12V_craw;
 wire signed [15:0] ay12F_adcrm, ay12F_bdcrm, ay12F_cdcrm;
-wire signed [15:0] ay12V_adcrm, ay12V_bdcrm, ay12V_cdcrm;
+
 wire AY12F_sample,AY12V_sample;
 wire [9:0] sound_outF;
 wire [9:0] sound_outV;
 
+//SLAPFIGHT CLOCKS
+reg clkf_cpu, maincpuclk_6M, aucpuclk_3M, aucpuclk_3Mb, ayclk_1p66;
+reg clk_6M_1,pixel_clk,clk_6M_3;
+
+//core clock generation logic based on jtframe code
+reg [4:0] cencnt =5'd0;
+
 always @(posedge clkaudio) begin
-	audio_l <= ({1'd0, sound_outF, 5'd0});
-	audio_r <= ({1'd0, sound_outV, 5'd0});
+	cencnt  <= cencnt+5'd1;
 end
+
+always @(posedge clkaudio) begin
+//	clkm_24MHZ	  	<= cencnt[0]   == 1'd0;
+//	clkf_cpu			<= cencnt[1:0] == 2'd0;
+//	maincpuclk_6M  <= cencnt[2:0] == 3'd0;
+//	clk_6M_1			<= cencnt[2:0] == 3'd0;
+//	pixel_clk		<= cencnt[2:0] == 3'd2;
+//	clk_6M_3		 	<= cencnt[2:0] == 3'd4;
+//  aucpuclk_3M		<= cencnt[3:0] == 4'd0;
+//   aucpuclk_3Mb  	<= cencnt[3:0] == 4'h8;
+   ayclk_1p66 		<= cencnt[4:0] == 5'd0;		
+end
+
+//assign core_pix_clk=pixel_clk;
+
+//always @(posedge clkaudio) begin
+//	audio_l <= ({1'd0, sound_outF, 5'd0});
+//	audio_r <= ({1'd0, sound_outV, 5'd0});
+//end
 
 jt49_bus AY_12F(
     .rst_n(RESET_n),
     .clk(clkaudio),    				// signal on positive edge //U1D_B_q
-    .clk_en(1),  						/* synthesis direct_enable = 1 */
+    .clk_en(ayclk_1p66),  						/* synthesis direct_enable = 1 */
     
     .bdir(IOA1),						// bus control pins of original chip
     .bc1(IOA0),
 	 .din(Z80A_databus_out),
-    .sel(1'b0), 						// if sel is low, the clock is divided by 2
+    .sel(1'b1), 						// if sel is low, the clock is divided by 2
     .dout(AY_12F_databus_out),
     
 	 .sound(sound_outF),  			// combined channel output
-    .A(ay12F_araw),    				// linearised channel output
-    .B(ay12F_braw),
-    .C(ay12F_craw),
+    .A(),    				// linearised channel output
+    .B(),
+    .C(),
     .sample(AY12F_sample)
 
 );
@@ -1072,19 +1054,19 @@ jt49_bus AY_12F(
 jt49_bus AY_12V(
     .rst_n(RESET_n),
     .clk(clkaudio),    				// signal on positive edge
-    .clk_en(1),  						/* synthesis direct_enable = 1 */
+    .clk_en(ayclk_1p66),  						/* synthesis direct_enable = 1 */
     
     .bdir(IOA3),	 					// bus control pins of original chip
     .bc1(IOA2),
 	 .din(Z80A_databus_out),
-    .sel(1'b0), 						// if sel is low, the clock is divided by 2
+    .sel(1'b1), 						// if sel is low, the clock is divided by 2
     .dout(AY_12V_databus_out),
     
 	 .sound(sound_outV),  			// combined channel output
-    .A(ay12V_araw),      			// linearised channel output
-    .B(ay12V_braw),
-    .C(ay12V_craw),
-    .sample(AY12V_sample),
+    .A(),      			// linearised channel output
+    .B(),
+    .C(),
+    .sample(),
 
     .IOA_in(AY_12V_ioa_in),		//IO to ICX security chip
     .IOA_out(AY_12V_ioa_out),
@@ -1093,13 +1075,16 @@ jt49_bus AY_12V(
     .IOB_out(AY_12V_iob_out)
 );
 
+assign audio_l = (pause) ? 0 : ({1'd0, sound_outF, 5'd0});
+assign audio_r = (pause) ? 0 : ({1'd0, sound_outV, 5'd0});
+		  
 reg [7:0] tmrmask ;//= 8'b00000000;
 reg [2:0] tmrcounter;
 reg [2:0] tmrcnt2;
 reg [7:0] zAY_12V_iob_out;
 reg [7:0] outercounter;
 
-always @(posedge U1D_B_q) begin
+always @(posedge ayclk_1p66/*U1D_B_q*/) begin
 
 	tmrcounter <= tmrcounter +3'd1;
 	if (tmrcounter==0)	tmrmask <= AY_12V_iob_out^8'h40;
@@ -1224,7 +1209,7 @@ reg [4:0] counterU8, counterU9, counterU10, counterU11;
 reg zL4B_clk2,zL4D_clk2,zL4E_clk2,zL4H_clk2;
 	
 	
-assign SLSE = bgclk_6|rSSEL; 
+assign SLSE = clk2_6MHZ|rSSEL; 
 
 always @(negedge SLD8) begin
 	store_L8 <= ({1'b0,BGRAM_out[3:0]});
@@ -1369,14 +1354,14 @@ always @(negedge SLD3) BG4DaddrH <= BGRAM_out;
 always @(negedge SLD5) BG4EaddrH <= BGRAM_out;
 always @(negedge SLD7) BG4HaddrH <= BGRAM_out;
 
-always @(posedge bgclk_6) begin
+always @(posedge clk2_6MHZ) begin
 	BG4BaddrL<=BG4BaddrLD;
 	BG4DaddrL<=BG4DaddrLD;
 	BG4EaddrL<=BG4EaddrLD;
 	BG4HaddrL<=BG4HaddrLD;
 end
 
-always @(negedge bgclk_6) begin
+always @(negedge clk2_6MHZ) begin
 	BG4BaddrLz<=BG4BaddrL+8'd1;
 	BG4DaddrLz<=BG4DaddrL+8'd1;
 	BG4EaddrLz<=BG4EaddrL+8'd1;
@@ -1410,12 +1395,8 @@ m2511_ram_4 sprites_11(
 );
 
 //  ****** FINAL 7-BIT ANALOGUE OUTPUT *******
-assign BLUE =        {clrB1,clrB0}; //rBLUE;
-assign RED =   {clrR2,clrR1,clrR0}; //rRED;
-assign GREEN = {clrG2,clrG1,clrG0}; //rGREEN;
+
 assign H_SYNC = rVGA_HS;
 assign V_SYNC = rVGA_VS;
-assign H_BLANK =  pixH<96 || pixH>432;
-assign V_BLANK = pixV>240 || pixV<16;
 
 endmodule

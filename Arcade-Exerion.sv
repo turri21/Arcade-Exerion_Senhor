@@ -220,8 +220,8 @@ wire [21:0] gamma_bus;
 
 wire [1:0] ar = status[20:19];
 
-assign VIDEO_ARX = (!ar) ? ((status[2])  ? 8'd4 : 8'd3) : (ar - 1'd1);
-assign VIDEO_ARY = (!ar) ? ((status[2])  ? 8'd3 : 8'd4) : 12'd0;
+assign VIDEO_ARX = (!ar) ? ((status[2])  ? 8'd10 : 8'd7) : (ar - 1'd1);
+assign VIDEO_ARY = (!ar) ? ((status[2])  ? 8'd7 : 8'd10) : 12'd0;
 //                          8   9   A   B   C   D   E   F
 //_________________________________________________________
 //	DIP SWITCH #1			  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
@@ -344,7 +344,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 ////////////////////   CLOCKS   ///////////////////
 
 wire clkm_20MHZ,clkSP_20MHz;
-wire clk_333M;
+wire clk_53p28;
 wire clk_sys=clkm_20MHZ;
 wire clk_vid;//=clkm_20MHZ;
 //reg ce_pix;
@@ -354,7 +354,7 @@ pll pll(
 		.rst(0),            			// reset.reset
 		.outclk_0(clkm_20MHZ),     // outclk0.clk
 		.outclk_1(clk_vid),        // outclk1.clk
-		.outclk_2(clk_333M),			// outclk2.clk
+		.outclk_2(clk_53p28),			// outclk2.clk
 		.outclk_3(clkSP_20MHz)
 );
 
@@ -393,7 +393,7 @@ wire flip = 0;
 
 screen_rotate screen_rotate (.*);
 
-arcade_video #(320,8) arcade_video //  8 : 3R 3G 2B
+arcade_video #(336,8) arcade_video //  8 : 3R 3G 2B
 (
 	.*,
 	.clk_video(clk_vid),
@@ -459,7 +459,7 @@ assign LED_USER = ioctl_download;
 exerion_fpga excore(
 	.clkm_20MHZ(clkm_20MHZ),
 	.clkSP_20MHz(clkSP_20MHz),
-	.clkaudio(clk_333M),
+	.clkaudio(clk_53p28),
 	.RED(r),
 	.GREEN(g),
 	.BLUE(b),
