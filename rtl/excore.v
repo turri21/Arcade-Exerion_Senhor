@@ -43,8 +43,8 @@ module exerion_fpga(
 //pixel counters
 reg [8:0] pixH = 9'b000000000;
 reg [7:0] pixV = 8'b00000000;
-reg [8:0] sppixH = 9'b000000000;
-reg [7:0] sppixV = 8'b00000000;
+//reg [8:0] pixH = 9'b000000000;
+//reg [7:0] pixV = 8'b00000000;
 
 wire [8:0] rpixelbusH;
 wire [7:0] rpixelbusV;
@@ -109,7 +109,7 @@ wire spU2A_Aq,spU2A_Anq,spU2A_Aqi;
 wire spU2A_Bq,spU2A_Bnq,spU2A_Bqi;
 wire spU2B_Aq,spU2B_Anq,spU2B_Aqi;
 
-ls107 spU2A_B(
+/*ls107 spU2A_B(
    .clear(PUR), 
    .clk(clkSP_20MHz), 
    .j(spU2A_Anq|!PUR), 
@@ -143,6 +143,11 @@ ls107 spU2B_A(
 buf (spclk1_10MHZ,spU2B_Aq);
 not (spclk2_6MHZ,spU2A_Aq);
 buf (spclk4_6BMHZ,spU2A_Bq);
+*/
+
+buf (spclk1_10MHZ,U2B_Aq);
+not (spclk2_6MHZ,U2A_Aq);
+buf (spclk4_6BMHZ,U2A_Bq);
 
 ls107 U2A_B(
    .clear(PUR), 
@@ -194,8 +199,8 @@ wire Z80_MREQ,Z80_WR,Z80_RD;
 wire Z80B_MREQ,Z80B_WR,Z80B_RD;
 reg Z80_DO_En;
 
-wire clk2_6MHZ, clk3_3MHZ;
-wire clk2_6MHZ_1,clk2_6MHZ_2;
+//wire clk2_6MHZ, clk3_3MHZ;
+//wire clk2_6MHZ_1,clk2_6MHZ_2;
 //coin input
 wire nCOIN;
 
@@ -654,25 +659,28 @@ reg [7:0] Z80A_IO2;
 
 always @(posedge IO2) Z80A_IO2 = Z80A_databus_out;
 
-wire [8:0] sppixHcntz;
-wire [7:0] sppixVcntz;
-assign sppixHcntz=sppixH+9'd1;
-assign sppixVcntz=sppixV+8'd1;
+/*
+wire [8:0] pixHcntz;
+wire [7:0] pixVcntz;
 assign pixHcntz=pixH+9'd1;
 assign pixVcntz=pixV+8'd1;
 
 always @(posedge spclk2_6MHZ) begin
 
 	//simplified pixel clock counter. The horizontal counts from 88 to 511, the vertical counts from 0 to 255
-	if (sppixH==9'b111111111) 
+	if (pixH==9'b111111111) 
 	begin
-		sppixH <= 9'b00101100z;
-		sppixV <= sppixVcntz;//pixVcnt+1;
+		pixH <= 9'b00101100z;
+		pixV <= pixVcntz;//pixVcnt+1;
 	end
-	else sppixH <= sppixHcntz;
+	else pixH <= pixHcntz;
 
 end
+*/
+
 reg spnH4CA,spnH8CA;
+assign pixHcntz=pixH+9'd1;
+assign pixVcntz=pixV+8'd1;
 
 always @(posedge clk2_6MHZ) begin
 
@@ -798,8 +806,8 @@ assign U9H_d = U11J_2|U11J_1;
 always @(posedge spclk1_10MHZ) U9H_A_nq <= 	~U9H_d;
 
 always @(posedge spclk1_10MHZ) begin
-	spbitdata_11 <= (sppixV[0]) ? 4'b0000 : U10H_data;
-	spbitdata_10 <= (sppixV[0]) ? U10H_data :4'b0000 ;
+	spbitdata_11 <= (pixV[0]) ? 4'b0000 : U10H_data;
+	spbitdata_10 <= (pixV[0]) ? U10H_data :4'b0000 ;
 end
 
 
@@ -818,7 +826,7 @@ reg [7:0] rPixelBusV1;
 
 ttl_74283 #(.WIDTH(4), .DELAY_RISE(0), .DELAY_FALL(0)) U12R(
 	.a(rSPRITE_databus[3:0]),
-	.b(sppixV[3:0]),
+	.b(pixV[3:0]),
 	.c_in(PUR),  
 	.sum(U12R_sum),
 	.c_out(U12R_cout)
@@ -827,7 +835,7 @@ ttl_74283 #(.WIDTH(4), .DELAY_RISE(0), .DELAY_FALL(0)) U12R(
 ttl_74283 #(.WIDTH(4), .DELAY_RISE(0), .DELAY_FALL(0)) U12S(
 
 	.a({rSPRITE_databus[7:4]}),
-	.b({sppixV[7:4]}),
+	.b({pixV[7:4]}),
 	.c_in(U12R_cout),
 	.sum(U12S_sum),
 	.c_out()
@@ -858,33 +866,35 @@ reg sp10_UD,sp10_nLD,sp10_CK,sp10_WE;
 reg sp11_UD,sp11_nLD,sp11_CK,sp11_WE;
 
 //sprite ram bit selection logic - U11E feeds the _10 bus
-always @(negedge clkm_20MHZ) begin
+//always @(posedge clkm_20MHZ) begin
 
-	if (sppixV[0]) 
-	begin
-		sp10_WE  <= (spclk1_10MHZ|U9H_A_nq|U9F_A_q);
-		sp10_CK  <= (spclk1_10MHZ|U9F_B_nq|U9F_A_q);
-		sp10_nLD <= U10nRCO;
-		sp11_WE  <= spclk2_6MHZ;
-		sp11_CK  <= spclk2_6MHZ;
-		sp11_nLD <= 1'b1;
+//	if (pixV[0]) 
+//	begin
+always @(*) begin
+		sp10_WE  <= pixV[0] ? (spclk1_10MHZ|U9H_A_nq|U9F_A_q) : spclk2_6MHZ;
+		sp10_CK  <= pixV[0] ? (spclk1_10MHZ|U9F_B_nq|U9F_A_q) : spclk2_6MHZ;
+		sp10_nLD <= pixV[0] ? U10nRCO : 1'b1;
+		sp11_WE  <= pixV[0] ? spclk2_6MHZ : (spclk1_10MHZ|U9H_A_nq|U9F_A_q);
+		sp11_CK  <= pixV[0] ? spclk2_6MHZ : (spclk1_10MHZ|U9F_B_nq|U9F_A_q);
+		sp11_nLD <= pixV[0] ? 1'b1 : U10nRCO;
 
 		sp10_UD  <= 1'b1; //( rpixelbusV[0])  ? 1'b1 : nr2UP;
 		sp11_UD  <= 1'b1; //(!rpixelbusV[0])  ? 1'b1 : nr2UP;		
-	end
-	else
-	begin
-		sp10_WE  <= spclk2_6MHZ;
-		sp10_CK  <= spclk2_6MHZ;
-		sp10_nLD <= 1'b1;
-		sp11_WE  <= (spclk1_10MHZ|U9H_A_nq|U9F_A_q);
-		sp11_CK  <= (spclk1_10MHZ|U9F_B_nq|U9F_A_q);
-		sp11_nLD <= U10nRCO;
-
-		sp10_UD  <= 1'b1; //( rpixelbusV[0])  ? 1'b1 : nr2UP;
-		sp11_UD  <= 1'b1; //(!rpixelbusV[0])  ? 1'b1 : nr2UP;			
-	end
 end
+//	end
+//	else
+//	begin
+//		sp10_WE  <= spclk2_6MHZ;
+//		sp10_CK  <= spclk2_6MHZ;
+//		sp10_nLD <= 1'b1;
+//		sp11_WE  <= (spclk1_10MHZ|U9H_A_nq|U9F_A_q);
+//		sp11_CK  <= (spclk1_10MHZ|U9F_B_nq|U9F_A_q);
+//		sp11_nLD <= U10nRCO;
+
+//		sp10_UD  <= 1'b1; //( rpixelbusV[0])  ? 1'b1 : nr2UP;
+//		sp11_UD  <= 1'b1; //(!rpixelbusV[0])  ? 1'b1 : nr2UP;			
+//	end
+//end
 
 
 reg [8:0] spramaddrb_10_cnt;
@@ -901,7 +911,7 @@ always @(posedge sp11_CK) spramaddrb_11_cnt = spramaddrb_11_up;
 wire [3:0] spram_out_10;
 wire [3:0] spram_out_11;
 
-always @(posedge spclk4_6BMHZ) {ZB} <= (sppixV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
+always @(posedge spclk2_6MHZ) {ZB} <= (pixV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
 
 always @(negedge spclk1_10MHZ) begin
 	U10nRCO<=!(spramaddr_cnt[0]&spramaddr_cnt[1]&spramaddr_cnt[2]&spramaddr_cnt[3]);

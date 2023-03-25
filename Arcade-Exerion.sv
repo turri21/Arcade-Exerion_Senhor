@@ -393,7 +393,7 @@ wire flip = 0;
 
 screen_rotate screen_rotate (.*);
 
-arcade_video #(336,8) arcade_video //  8 : 3R 3G 2B
+arcade_video #(388,8) arcade_video //  8 : 3R 3G 2B
 (
 	.*,
 	.clk_video(clk_vid),
