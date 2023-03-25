@@ -327,17 +327,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_index(ioctl_index),
 	.ioctl_wait(ioctl_wait),
 
-	//SD RAM implementation?
 	.sdram_sz(sdram_sz),
-	//.sd_lba(sd_lba),
-	//.sd_rd(sd_rd),
-	//.sd_wr(sd_wr),
-	//.sd_ack(sd_ack),
-	//.sd_buff_addr(sd_buff_addr),
-	//.sd_buff_dout(sd_buff_dout),
-	//.sd_buff_din(sd_buff_din),
-	//.sd_buff_wr(sd_buff_wr),
-
 	.joystick_0(joystick_0)
 );
 
@@ -352,10 +342,10 @@ wire clk_vid;//=clkm_20MHZ;
 pll pll(
 		.refclk(CLK_50M),  			// refclk.clk FPGA_CLK1_50
 		.rst(0),            			// reset.reset
-		.outclk_0(clkm_20MHZ),     // outclk0.clk
-		.outclk_1(clk_vid),        // outclk1.clk
-		.outclk_2(clk_53p28),			// outclk2.clk
-		.outclk_3(clkSP_20MHz)
+		.outclk_0(clkm_20MHZ),     // outclk0.clk = 20Mhz
+		.outclk_1(clk_vid),        // outclk1.clk = 40Mhz
+		.outclk_2(clk_53p28),		// outclk2.clk = 53.28Mhz
+		.outclk_3()
 );
 
 wire m_right  		= joystick_0[0];
@@ -374,7 +364,6 @@ wire m_pause  		= joystick_0[9];
 always @(posedge clk_vid) begin
 	reg [1:0] div;
 	div <= div + (forced_scandoubler ? 2'd1 : 2'd2);
-	//ce_pix <= !div;
 end
 
 ///////////////////   VIDEO   ////////////////////
@@ -384,7 +373,7 @@ wire hs, vs;
 wire [2:0] r;
 wire [2:0] g;
 wire [1:0] b;
-//wire [7:0] rgb = {r[2:0],g[2:0],b[1:0]};//23:0
+
 wire [7:0] rgb = {rgb_out[7:5],rgb_out[4:2],rgb_out[1:0]};//23:0
 
 wire no_rotate = status[2] | direct_video;
@@ -458,7 +447,6 @@ assign LED_USER = ioctl_download;
 
 exerion_fpga excore(
 	.clkm_20MHZ(clkm_20MHZ),
-	.clkSP_20MHz(clkSP_20MHz),
 	.clkaudio(clk_53p28),
 	.RED(r),
 	.GREEN(g),

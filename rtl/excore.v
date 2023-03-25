@@ -14,7 +14,6 @@
 
 module exerion_fpga(
 	input clkm_20MHZ,
-	input clkSP_20MHz,
 	input	clkaudio,
 	output [2:0] RED,     	//from fpga core to sv
 	output [2:0] GREEN,		//from fpga core to sv
@@ -32,7 +31,7 @@ module exerion_fpga(
 	input [24:0] dn_addr,
 	input 		 dn_wr,
 	input [7:0]  dn_data,
-	output [15:0] audio_l, //from jt49_1 .sound
+	output [15:0] audio_l,  //from jt49_1 .sound
 	output [15:0] audio_r,  //from jt49_2 .sound
 	input [15:0] hs_address,
 	output [7:0] hs_data_out,
@@ -43,8 +42,6 @@ module exerion_fpga(
 //pixel counters
 reg [8:0] pixH = 9'b000000000;
 reg [7:0] pixV = 8'b00000000;
-//reg [8:0] pixH = 9'b000000000;
-//reg [7:0] pixV = 8'b00000000;
 
 wire [8:0] rpixelbusH;
 wire [7:0] rpixelbusV;
@@ -67,8 +64,7 @@ wire 	ic2b_1q;
 wire 	ic2b_2nq;
 wire 	clk_phase2;
 
-wire clk1_10MHZ,clk2_6MHZ,clk2_6AMHZ,clk3_3MHZ,clk4_6BMHZ;
-wire spclk1_10MHZ,spclk2_6MHZ,spclk3_3MHZ,spclk4_6BMHZ;
+wire clk1_10MHZ,clk2_6MHZ,clk2_6AMHZ,clk3_3MHZ;
 
 wire PUR = 1'b1;
 wire H4CA;
@@ -91,63 +87,12 @@ wire [15:0] Z80B_addrbus;
 wire [7:0] Z80B_databus_in;
 wire [7:0] Z80B_databus_out;
 
-//duplicate clocks for each layer
-//tile & main CPU clock
+
+//clocks
 wire U2A_Aq,U2A_Anq,U2A_Aqi;
 wire U2A_Bq,U2A_Bnq,U2A_Bqi;
 wire U2B_Aq,U2B_Anq,U2B_Aqi;
 wire U2B_Bq,U2B_Bnq,U2B_Bqi;
-
-//background
-wire U3A_Aq,U3A_Anq,U3A_Aqi;
-wire U3A_Bq,U3A_Bnq,U3A_Bqi;
-wire U3B_Aq,U3B_Anq,U3B_Aqi;
-wire U3B_Bq,U3B_Bnq,U3B_Bqi;
-
-//sprites
-wire spU2A_Aq,spU2A_Anq,spU2A_Aqi;
-wire spU2A_Bq,spU2A_Bnq,spU2A_Bqi;
-wire spU2B_Aq,spU2B_Anq,spU2B_Aqi;
-
-/*ls107 spU2A_B(
-   .clear(PUR), 
-   .clk(clkSP_20MHz), 
-   .j(spU2A_Anq|!PUR), 
-   .k(spU2A_Anq|!PUR), 
-   .q(spU2A_Bq), 
-   .qnot(spU2A_Bnq),
-	.q_immediate(spU2A_Bqi)
-);
-
-ls107 spU2A_A(
-   .clear(PUR), 
-   .clk(clkSP_20MHz), 
-   .j(spU2A_Bq), 
-   .k(PUR), 
-   .q(spU2A_Aq), 
-   .qnot(spU2A_Anq),
-	.q_immediate(spU2A_Aqi)
-);
-
-
-ls107 spU2B_A(
-   .clear(PUR), 
-   .clk(clkSP_20MHz), 
-   .j(PUR), 
-   .k(PUR), 
-   .q(spU2B_Aq), 
-   .qnot(spU2B_Anq),
-	.q_immediate(spU2B_Aqi)
-);
-
-buf (spclk1_10MHZ,spU2B_Aq);
-not (spclk2_6MHZ,spU2A_Aq);
-buf (spclk4_6BMHZ,spU2A_Bq);
-*/
-
-buf (spclk1_10MHZ,U2B_Aq);
-not (spclk2_6MHZ,U2A_Aq);
-buf (spclk4_6BMHZ,U2A_Bq);
 
 ls107 U2A_B(
    .clear(PUR), 
@@ -189,18 +134,14 @@ ls107 U2B_A(
 	.q_immediate(U2B_Aqi)
 );
 
-buf (clk1_10MHZ,U2B_Aq);
-not (clk2_6MHZ,U2A_Aq);
-buf (clk3_3MHZ,U2B_Bnq);
-buf (clk4_6BMHZ,U2A_Bq);
-
+buf (clk1_10MHZ,U2B_Aq);  	//10MHz Clock
+not (clk2_6MHZ,U2A_Aq);		//6.66Mhz Clock
+buf (clk3_3MHZ,U2B_Bnq);	//3.33Mhz Clock
 
 wire Z80_MREQ,Z80_WR,Z80_RD;
 wire Z80B_MREQ,Z80B_WR,Z80B_RD;
 reg Z80_DO_En;
 
-//wire clk2_6MHZ, clk3_3MHZ;
-//wire clk2_6MHZ_1,clk2_6MHZ_2;
 //coin input
 wire nCOIN;
 
@@ -598,7 +539,7 @@ wire [3:0] ZC;
 
 //select layer with priority
 
- always @(posedge spclk2_6MHZ) begin
+ always @(posedge clk2_6MHZ) begin
 	//equivalent of VID_B.  If the 5th bit is used the upper part of the pallet ROM is
 	//utilized and the sprite layer is selected.
 	sp_clr_addr <= (ZB[3:0]) 		? 	{1'b1,ZB[3:0]}	: 5'b00000;
@@ -633,8 +574,6 @@ prom6331_E1 UE1(
 	.q({BLUE,GREEN,RED})
 );
 
-reg rVGA_HS;
-reg rVGA_VS;
 wire rSSEL;
 
 wire r2UP; //flips the screen - removed logic to help with debugging
@@ -659,32 +598,11 @@ reg [7:0] Z80A_IO2;
 
 always @(posedge IO2) Z80A_IO2 = Z80A_databus_out;
 
-/*
-wire [8:0] pixHcntz;
-wire [7:0] pixVcntz;
-assign pixHcntz=pixH+9'd1;
-assign pixVcntz=pixV+8'd1;
-
-always @(posedge spclk2_6MHZ) begin
-
-	//simplified pixel clock counter. The horizontal counts from 88 to 511, the vertical counts from 0 to 255
-	if (pixH==9'b111111111) 
-	begin
-		pixH <= 9'b00101100z;
-		pixV <= pixVcntz;//pixVcnt+1;
-	end
-	else pixH <= pixHcntz;
-
-end
-*/
-
 reg spnH4CA,spnH8CA;
 assign pixHcntz=pixH+9'd1;
 assign pixVcntz=pixV+8'd1;
 
 always @(posedge clk2_6MHZ) begin
-
-	
 	//simplified pixel clock counter. The horizontal counts from 88 to 511, the vertical counts from 0 to 255
 	if (pixH==9'b111111111) 
 	begin
@@ -693,11 +611,8 @@ always @(posedge clk2_6MHZ) begin
 	end
 	else pixH <= pixHcntz;
 
-	rVGA_HS <= !U9R_Q5;							//horizontal sync
-	rVGA_VS <= ((!(&pixV[7:3]))|pixV[2]); 	//vertical sync
 	spnH4CA<=~&pixH[4:1];
 	spnH8CA<=~&pixH[8:5];
-	
 end
 
 assign	rSSEL = U9R_Q4|nVDSP;  //used to load the per line memory location for the background layer 
@@ -755,7 +670,7 @@ wire [7:0] sprom_data;
 eprom_5 prom_SPRITE
 (
 	.ADDR({CHDN,CHLF,sROM_A11,sROM_A10,sROM_A9,sum4,sum3,sum2,sum1,sROM_A4,sROM_A3,sROM_A2,sROM_A1,sROM_A0}),//
-	.CLK(clkm_20MHZ),//clkSP_20MHz
+	.CLK(clkm_20MHZ),//
 	.DATA(sprom_data),//
 	.ADDR_DL(dn_addr),
 	.CLK_DL(clkm_20MHZ),//
@@ -803,9 +718,9 @@ wire U9H_d;
 assign U9H_d = U11J_2|U11J_1;
 
 
-always @(posedge spclk1_10MHZ) U9H_A_nq <= 	~U9H_d;
+always @(posedge clk1_10MHZ) U9H_A_nq <= 	~U9H_d;
 
-always @(posedge spclk1_10MHZ) begin
+always @(posedge clk1_10MHZ) begin
 	spbitdata_11 <= (pixV[0]) ? 4'b0000 : U10H_data;
 	spbitdata_10 <= (pixV[0]) ? U10H_data :4'b0000 ;
 end
@@ -866,36 +781,18 @@ reg sp10_UD,sp10_nLD,sp10_CK,sp10_WE;
 reg sp11_UD,sp11_nLD,sp11_CK,sp11_WE;
 
 //sprite ram bit selection logic - U11E feeds the _10 bus
-//always @(posedge clkm_20MHZ) begin
 
-//	if (pixV[0]) 
-//	begin
 always @(*) begin
-		sp10_WE  <= pixV[0] ? (spclk1_10MHZ|U9H_A_nq|U9F_A_q) : spclk2_6MHZ;
-		sp10_CK  <= pixV[0] ? (spclk1_10MHZ|U9F_B_nq|U9F_A_q) : spclk2_6MHZ;
+		sp10_WE  <= pixV[0] ? (clk1_10MHZ|U9H_A_nq|U9F_A_q) : clk2_6MHZ;
+		sp10_CK  <= pixV[0] ? (clk1_10MHZ|U9F_B_nq|U9F_A_q) : clk2_6MHZ;
 		sp10_nLD <= pixV[0] ? U10nRCO : 1'b1;
-		sp11_WE  <= pixV[0] ? spclk2_6MHZ : (spclk1_10MHZ|U9H_A_nq|U9F_A_q);
-		sp11_CK  <= pixV[0] ? spclk2_6MHZ : (spclk1_10MHZ|U9F_B_nq|U9F_A_q);
+		sp11_WE  <= pixV[0] ? clk2_6MHZ : (clk1_10MHZ|U9H_A_nq|U9F_A_q);
+		sp11_CK  <= pixV[0] ? clk2_6MHZ : (clk1_10MHZ|U9F_B_nq|U9F_A_q);
 		sp11_nLD <= pixV[0] ? 1'b1 : U10nRCO;
 
 		sp10_UD  <= 1'b1; //( rpixelbusV[0])  ? 1'b1 : nr2UP;
 		sp11_UD  <= 1'b1; //(!rpixelbusV[0])  ? 1'b1 : nr2UP;		
 end
-//	end
-//	else
-//	begin
-//		sp10_WE  <= spclk2_6MHZ;
-//		sp10_CK  <= spclk2_6MHZ;
-//		sp10_nLD <= 1'b1;
-//		sp11_WE  <= (spclk1_10MHZ|U9H_A_nq|U9F_A_q);
-//		sp11_CK  <= (spclk1_10MHZ|U9F_B_nq|U9F_A_q);
-//		sp11_nLD <= U10nRCO;
-
-//		sp10_UD  <= 1'b1; //( rpixelbusV[0])  ? 1'b1 : nr2UP;
-//		sp11_UD  <= 1'b1; //(!rpixelbusV[0])  ? 1'b1 : nr2UP;			
-//	end
-//end
-
 
 reg [8:0] spramaddrb_10_cnt;
 reg [8:0] spramaddrb_10_up;
@@ -911,9 +808,9 @@ always @(posedge sp11_CK) spramaddrb_11_cnt = spramaddrb_11_up;
 wire [3:0] spram_out_10;
 wire [3:0] spram_out_11;
 
-always @(posedge spclk2_6MHZ) {ZB} <= (pixV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
+always @(posedge clk2_6MHZ) {ZB} <= (pixV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
 
-always @(negedge spclk1_10MHZ) begin
+always @(negedge clk1_10MHZ) begin
 	U10nRCO<=!(spramaddr_cnt[0]&spramaddr_cnt[1]&spramaddr_cnt[2]&spramaddr_cnt[3]);
 end
 
@@ -921,14 +818,14 @@ wire P4,P3,P2,P1;
 wire U10U_Q4,U10U_Q5,U10U_Q6,U10U_Q7;
 
 ls138x U10U( //#(.WIDTH_OUT(8), .DELAY_RISE(0), .DELAY_FALL(0)) 
-  .nE1(spclk1_10MHZ), //
+  .nE1(clk1_10MHZ), //
   .nE2(spramaddr_cnt[0]), //
   .E3(spramaddr_cnt[1]), //
   .A({1'b0,spramaddr_cnt[3:2]}), //
   .Y({U10U_Q7,U10U_Q6,U10U_Q5,U10U_Q4,P4,P3,P2,P1})
 );
 
-always @(posedge spclk1_10MHZ) begin
+always @(posedge clk1_10MHZ) begin
 
 //U11H     - 161 counter that increments on the 10Mhz clock and is reset to 0 by P4, this can be a simple add counter
 //U10J     - Takes the output of U11H and switches the output based on signal 'BIG2'
@@ -1405,8 +1302,7 @@ m2511_ram_4 sprites_11(
 );
 
 //  ****** FINAL 7-BIT ANALOGUE OUTPUT *******
-
-assign H_SYNC = rVGA_HS;
-assign V_SYNC = rVGA_VS;
+assign	H_SYNC = !U9R_Q5;								//horizontal sync
+assign	V_SYNC = ((!(&pixV[7:3]))|pixV[2]); 	//vertical sync
 
 endmodule
