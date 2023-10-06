@@ -333,16 +333,16 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 ////////////////////   CLOCKS   ///////////////////
 
-wire clkm_20MHZ,clkSP_20MHz;
+wire clkmain;
 wire clk_53p28;
-wire clk_sys=clkm_20MHZ;
+wire clk_sys=clkmain;//clkm_20MHZ;
 wire clk_vid;//=clkm_20MHZ;
 //reg ce_pix;
 
 pll pll(
 		.refclk(CLK_50M),  			// refclk.clk FPGA_CLK1_50
 		.rst(0),            			// reset.reset
-		.outclk_0(clkm_20MHZ),     // outclk0.clk = 20Mhz
+		.outclk_0(clkmain),     // outclk0.clk = 20Mhz
 		.outclk_1(clk_vid),        // outclk1.clk = 40Mhz
 		.outclk_2(clk_53p28),		// outclk2.clk = 53.28Mhz
 		.outclk_3()
@@ -379,6 +379,7 @@ wire [7:0] rgb = {rgb_out[7:5],rgb_out[4:2],rgb_out[1:0]};//23:0
 wire no_rotate = status[2] | direct_video;
 wire rotate_ccw = 0;
 wire flip = 0;
+wire core_pix_clk;
 
 screen_rotate screen_rotate (.*);
 
@@ -446,7 +447,7 @@ wire reset = (RESET | status[0] | buttons[1]);
 assign LED_USER = ioctl_download;
 
 exerion_fpga excore(
-	.clkm_20MHZ(clkm_20MHZ),
+	.clk_sys(clkmain),
 	.clkaudio(clk_53p28),
 	.RED(r),
 	.GREEN(g),
@@ -458,8 +459,8 @@ exerion_fpga excore(
 	.V_BLANK(vblank),
 	.RESET_n(~reset),
 	.pause(pause_cpu),
-	.CONTROLS(~{m_coin,m_start2p,m_start1p,m_shoot2,m_shoot,m_up,m_down,m_left,m_right}),
-	.DIP1(sw[1]&8'h7F), //dip switch #1 - filter out table option
+	.CONTROLS(~{m_coin,m_start2p,m_start1p,m_shoot2,m_shoot,m_left,m_right,m_down,m_up}),
+	.DIP1(sw[1]), //dip switch #1 - filter out table option &8'h7F
 	.DIP2(sw[2]),
 	.dn_addr(ioctl_addr),
 	.dn_data(ioctl_dout),
@@ -471,5 +472,5 @@ exerion_fpga excore(
 	.hs_data_in(hs_data_in),
 	.hs_write(hs_write)
 );
-
+									
 endmodule

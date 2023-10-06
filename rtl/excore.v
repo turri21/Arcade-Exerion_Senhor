@@ -13,7 +13,7 @@
 `timescale 1ns/1ps
 
 module exerion_fpga(
-	input clkm_20MHZ,
+	input clk_sys,
 	input	clkaudio,
 	output [2:0] RED,     	//from fpga core to sv
 	output [2:0] GREEN,		//from fpga core to sv
@@ -43,41 +43,23 @@ module exerion_fpga(
 reg [8:0] pixH = 9'b000000000;
 reg [7:0] pixV = 8'b00000000;
 
-wire [8:0] rpixelbusH;
-wire [7:0] rpixelbusV;
-
-wire [8:0] pixelbusH;
-wire [7:0] pixelbusV;
+reg [8:0] rpixelbusH;
+reg [7:0] rpixelbusV;
 wire [10:0] vramaddr;
 wire RAMA_WR,RAMB_WR; 
 
-wire 	U7L_Q3,U7L_Q2,U7L_Q1,U7L_Q0;
-wire 	U8K_1,U8K_2;
-wire 	[7:0] u6k_data;
+wire 	[7:0] u6k_data; //foreground character ROM output data
 reg 	[7:0] u7K_data;
-wire 	[7:0] vramdata0in;
 reg 	[7:0] vramdata0out;
 wire 	[7:0] U6N_VRAM_Q;
-wire 	ic2a_1q;
-wire 	ic2a_2q;
-wire 	ic2b_1q;
-wire 	ic2b_2nq;
-wire 	clk_phase2;
 
 wire clk1_10MHZ,clk2_6MHZ,clk2_6AMHZ,clk3_3MHZ;
 
 wire PUR = 1'b1;
-wire H4CA;
+wire SSEL;
 
 
-
-wire U9M_B_nq,U9M_B_q;
-
-wire SNHI,SSEL;
-
-wire U9S_Q7,U9S_Q6,U9S_Q5,U9S_Q4,U9S_Q3,U9S_Q2,U9S_Q1,U9S_Q0;
-wire U9R_Q7,U9R_Q6,U9R_Q5,U9R_Q4,U9R_Q3,U9R_Q2,U9R_Q1,U9R_Q0;
-wire bgU9R_Q7,bgU9R_Q6,bgU9R_Q5,bgU9R_Q4,bgU9R_Q3,bgU9R_Q2,bgU9R_Q1,bgU9R_Q0;
+wire [7:0] U9R_Q;
 
 wire [15:0] Z80A_addrbus;
 wire [7:0] Z80A_databus_in;
@@ -87,6 +69,34 @@ wire [15:0] Z80B_addrbus;
 wire [7:0] Z80B_databus_in;
 wire [7:0] Z80B_databus_out;
 
+//SLAPFIGHT CLOCKS
+reg clkf_cpu, maincpuclk_6M, aucpuclk_3M, aucpuclk_3Mb, ayclk_1p66;
+reg clk_6M_1,pixel_clk,clk_6M_3;
+//core clock generation logic based on jtframe code
+reg [4:0] cen40cnt =5'd0;
+
+wire clkm_20MHZ=clk_sys;
+
+always @(posedge clk_sys) begin
+	cen40cnt  <= cen40cnt+5'd1;
+end
+
+always @(posedge clk_sys) begin
+
+   //clkm_20MHZ 		<= cen40cnt[0] == 1'd0;		
+end
+
+//core clock generation logic based on jtframe code
+reg [4:0] cencnt =5'd0;
+
+always @(posedge clkaudio) begin
+	cencnt  <= cencnt+5'd1;
+end
+
+always @(posedge clkaudio) begin
+
+   ayclk_1p66 		<= cencnt[4:0] == 5'd0;		
+end
 
 //clocks
 wire U2A_Aq,U2A_Anq,U2A_Aqi;
@@ -157,18 +167,6 @@ ttl_7474 #(.BLOCKS(1), .DELAY_RISE(0), .DELAY_FALL(0)) U1D_A (
 	.n_q(nCOIN)
 );
 
-//pause
-/*ttl_7474 #(.BLOCKS(1), .DELAY_RISE(0), .DELAY_FALL(0)) MiSTer_Pause (
-	.n_pre(PUR),
-	.n_clr(PUR),
-	.d(pause),
-	.clk(nVDSP),
-	.q(),
-	.n_q(wait_n)
-);*/
-
-
-
 //First Z80 CPU responsible for main game logic, sound, sprites
 T80as Z80A(
 	.RESET_n(RESET_n),
@@ -201,96 +199,86 @@ T80as Z80B(
 	.RD_n(Z80B_RD)
 );
 
-ls139 U3RA(
-	.a(Z80A_addrbus[13]),
-   .b(Z80A_addrbus[14]),
-  	.n_g(Z80A_addrbus[15]),
-  	.y(U3RA_Q)
-);
-
-ls139 U3RB(
-	.a(Z80A_addrbus[14]),
-   .b(Z80A_addrbus[15]),
-  	.n_g(Z80_MREQ),
-  	.y(U3RB_Q)
-);
-
-
-wire [3:0] U3RA_Q;
 wire [3:0] U3RB_Q;
-wire Z80_RAM_en;
-wire Z80_B1_en ;
-assign Z80_RAM_en = !U3RA_Q[3];
-assign Z80_B1_en = !(U3RA_Q[2] & U3RA_Q[1] & U3RA_Q[0]);
-reg [7:0] rZ80A_databus_in;
-reg [7:0] rZ80B_databus_in;
 
 //joystick inputs from MiSTer framework
-wire m_right  		= CONTROLS[0];
-wire m_left   		= CONTROLS[1];
-wire m_down   		= CONTROLS[2];
-wire m_up     		= CONTROLS[3];
-wire m_shoot  		= CONTROLS[4];
-wire m_shoot2  	= CONTROLS[5];
-wire m_start1p  	= CONTROLS[6];
-wire m_start2p  	= CONTROLS[7];
 wire m_coin   		= CONTROLS[8];
+									
+wire ZA_ROM, ZA_RAM, RAMA, RAMB, IN1, IN2, IN3, IO1, IO2, AY1, AY2;
+assign ZA_ROM 	= ((Z80A_addrbus[15:13] == 3'b000)|(Z80A_addrbus[15:13] == 3'b001)|(Z80A_addrbus[15:13] == 3'b010))	
+																				? 1'b0 : 1'b1; //0000 - 5FFF - Main Program ROM
+assign ZA_RAM 	= (Z80A_addrbus[15:13] == 3'b011)				? 1'b0 : 1'b1; //6000 - 7FFF - Main Program ROM
+assign RAMA		= (Z80A_addrbus[15:11] == 5'b10000)				? 1'b0 : 1'b1; //8000 - 87FF
+assign RAMB		= (Z80A_addrbus[15:11] == 5'b10001)				? 1'b0 : 1'b1; //8800 - 8FFF
+assign IN1	  	= (Z80A_addrbus[15:11] == 5'b10100)				? 1'b0 : 1'b1; //A000
+assign IN2	  	= (Z80A_addrbus[15:11] == 5'b10101)				? 1'b0 : 1'b1; //A800
+assign IN3	  	= (Z80A_addrbus[15:11] == 5'b10110)				? 1'b0 : 1'b1; //B000
+assign IO1	  	= (Z80A_addrbus[15:11] == 5'b11000)				? 1'b0 : 1'b1; //c000 (Write Only)
+assign IO2	  	= (Z80A_addrbus[15:11] == 5'b11001)				? 1'b0 : 1'b1; //c800 (Write Only)
+assign AY1		= (Z80A_addrbus[15:11] == 5'b11010)				? 1'b0 : 1'b1; //D000 - D001
+assign AY2		= (Z80A_addrbus[15:11] == 5'b11011)				? 1'b0 : 1'b1; //D800 - D801
 
-//CPU read selection logic
-// ******* PRIMARY CPU IC SELECTION LOGIC FOR TILE, SPRITE, SOUND & GAME EXECUTION ********
-always @(posedge clk3_3MHZ) begin
-	if (Z80_B1_en&!Z80_MREQ) rZ80A_databus_in <= prom_prog1_out;	//Main Program ROM & Second Program ROM
-	else if (Z80_RAM_en & !Z80_RD) rZ80A_databus_in <= U4N_Z80A_RAM_out;					//Main System RAM
-
-	//reads from AY sound chips
-	else if (!IOA1 & IOA0) rZ80A_databus_in <= AY_12F_databus_out;
-	else if (!IOA3 & IOA2) rZ80A_databus_in <= AY_12V_databus_out;
-
-	//if !U7U_1A then the external bi-directional databus buffer is enabled
-	else if ((Z80A_addrbus[15])&(!Z80_MREQ)) begin //Output of U7U_1A OR GATE
-
-		if (!Z80_RD & !RAMA) 	rZ80A_databus_in <= U6N_VRAM_Q; 		//VRAM
-		else if (!Z80_RD & !RAMB) 		rZ80A_databus_in <= rSPRITE_databus;//U11SR_SPRAM_Q; 
-		else if (!Z80_RD & !IN1) 		rZ80A_databus_in <= ({m_start2p,m_start1p,m_shoot2,m_shoot,m_left,m_right,m_down,m_up});	//JOYSTICK 1 & 2 - ST2, ST1,    FIRB,FIRA,LF,  RG,  DN,  UP
-		else if (!Z80_RD & !IN2) 		rZ80A_databus_in <= {DIP1};												//DIP SWITCH 1 //LIVES //BONUS LIFE //DIFFICULTY //CABINET
-		else if (!Z80_RD & !IN3) 		rZ80A_databus_in <= {1'b0,1'b0,1'b0,1'b0,DIP2[1],DIP2[0],DIP2[2],nVDSP};											//DIP SWITCH 2 & VDSP feedback
-
-	end
-
-
+//sound chip selection logic
+reg IOA0,IOA1,IOA2,IOA3;
+always @(*) begin
+	IOA0 <= !(Z80A_addrbus[0]|AY1);
+	IOA1 <= !(Z80A_addrbus[1]|AY1);
+	IOA2 <= !(Z80A_addrbus[0]|AY2);
+	IOA3 <= !(Z80A_addrbus[1]|AY2);
 end
 
-// *************** SECOND CPU IC SELECTION LOGIC FOR BACKGROUND GRAPHICS *****************
-always @(posedge clk3_3MHZ) begin
-			
-	rZ80B_databus_in <= 			(!BG_PROM & !Z80B_MREQ) 				? bg_prom_prog2_out:
+assign RAMA_WR = RAMA|Z80_WR;
+assign RAMB_WR = RAMB|Z80_WR;
+
+//CPU data bus read selection logic
+// **Z80A* PRIMARY CPU IC SELECTION LOGIC FOR TILE, SPRITE, SOUND & GAME EXECUTION ********
+assign Z80A_databus_in = 	(!ZA_ROM&!Z80_MREQ)	? 	prom_prog1_out :
+									(!ZA_RAM & !Z80_RD)  ? 	U4N_Z80A_RAM_out :
+									(!Z80_RD & !RAMA)		?  U6N_VRAM_Q : 		//VRAM
+									(!Z80_RD & !RAMB)		?  rSPRITE_databus : //U11SR_SPRAM_Q
+									(!Z80_RD & !IN1)		?	(CONTROLS[7:0]) :	//JOYSTICK 1 & 2 - ST2, ST1,    FIRB,FIRA,LF,  RG,  DN,  UP
+									(!Z80_RD & !IN2)		?	DIP1 :						
+									(!Z80_RD & !IN3)		?	{1'b0,1'b0,1'b0,1'b0,DIP2[1],DIP2[0],DIP2[2],nVDSP} :
+									(!IOA1 & IOA0)			? 	AY_12F_databus_out :
+									(!IOA3 & IOA2)			? 	AY_12V_databus_out :
+																8'b00000000;
+									
+// **Z80B********* SECOND CPU IC SELECTION LOGIC FOR BACKGROUND GRAPHICS *****************
+assign	Z80B_databus_in = 	(!BG_PROM & !Z80B_MREQ) 				? bg_prom_prog2_out:
 										(!Z80B_RD & !BG_RAM)    				? U4V_Z80B_RAM_out:
 										(!Z80B_RD & !BG_IO2)   					? Z80A_IO2:
 										(!Z80B_RD & !BG_VDSP)					? ({1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,nVDSP,SNHI}):
 																						8'b00000000;
-end
 
 wire wait_n = !pause;
 wire SLSE;
-wire CDCK, SLD11, SLD10, SLD9, SLD8, SLD7, SLD6, SLD5, SLD4, SLD3, SLD2, SLD1, SLD0;
-wire U8E_Q7,U8E_Q6,U8E_Q5;
 
-//select background graphic timer to pre-load
-ls138x U8F(
-  .nE1(SLSE), //SLSE
-  .nE2(U7V_q[3]),
-  .E3(PUR),
-  .A({U7V_q[2],U7V_q[1],U7V_q[0]}),
-  .Y({SLD7,SLD6,SLD5,SLD4,SLD3,SLD2,SLD1,SLD0})
-);
+reg [11:0] SLD;
+reg CDCK;
 
-ls138x U8E(
-  .nE1(SLSE), //SLSE
-  .nE2(1'b0), 
-  .E3(U7V_q[3]), 
-  .A({U7V_q[2],U7V_q[1],U7V_q[0]}),
-  .Y({U8E_Q7,U8E_Q6,U8E_Q5,CDCK,SLD11,SLD10,SLD9,SLD8})
-);
+always @(*) begin
+	 if (!SLSE) begin
+		case (U7V_q[3:0])
+		  4'b0000: {CDCK,SLD[11:0]}=13'b1111111111110; //0x8000
+		  4'b0001: {CDCK,SLD[11:0]}=13'b1111111111101; //0x8001
+		  4'b0010: {CDCK,SLD[11:0]}=13'b1111111111011; //0x8002
+		  4'b0011: {CDCK,SLD[11:0]}=13'b1111111110111; //0x8003
+		  4'b0100: {CDCK,SLD[11:0]}=13'b1111111101111; //0x8004
+		  4'b0101: {CDCK,SLD[11:0]}=13'b1111111011111; //0x8005
+		  4'b0110: {CDCK,SLD[11:0]}=13'b1111110111111; //0x8006
+		  4'b0111: {CDCK,SLD[11:0]}=13'b1111101111111; //0x8007
+		  4'b1000: {CDCK,SLD[11:0]}=13'b1111011111111; //0x8008
+		  4'b1001: {CDCK,SLD[11:0]}=13'b1110111111111; //0x8009
+		  4'b1010: {CDCK,SLD[11:0]}=13'b1101111111111; //0x800A
+		  4'b1011: {CDCK,SLD[11:0]}=13'b1011111111111; //0x800B
+		  4'b1100: {CDCK,SLD[11:0]}=13'b0111111111111; //0x800C
+		  default: {CDCK,SLD[11:0]}=13'b1111111111111; //0x800D-0x800F
+		endcase
+	 end
+	 else begin
+		{CDCK,SLD[11:0]}= 13'b1111111111111;
+	 end
+end
 
 reg [7:0] U3K_Q; //background scene selection
 always @(posedge CDCK) U3K_Q<=BGRAM_out; //U3K
@@ -298,51 +286,45 @@ always @(posedge CDCK) U3K_Q<=BGRAM_out; //U3K
 wire [3:0] U4KJ_Q;
 
 prom6301_4KJ U4KJ(
-	.addr({U3K_Q[3:0],SA3|SB3,SA2|SB2,SA1|SB1,SA0|SB0}),
+	.addr({U3K_Q[3:0],|S3,|S2,|S1,|S0}),
 	.clk(clkm_20MHZ),
 	.n_cs(1'b0), 
 	.q(U4KJ_Q)
 );
 
-wire U4ML_1,U4ML_2;
+reg [1:0] U4ML;
 
-top_74ls153 U4ML(
-	 .A(U4KJ_Q[0]),
-	 .B(U4KJ_Q[1]),
-	 .EN_n({u4ML_EN,u4ML_EN}),
-    .D1_0(SA0),
-	 .D1_1(SA1),
-	 .D1_2(SA2),
-	 .D1_3(SA3),
-    .D2_0(SB0), 
-	 .D2_1(SB1), 
-	 .D2_2(SB2), 
-	 .D2_3(SB3),
-    .Y1(U4ML_1), 
-	 .Y2(U4ML_2)
-);
-
+always @(*) begin
+   if (u4ML_EN) 
+        U4ML  <= 2'b00;
+	else
+		case (U4KJ_Q[1:0])
+			2'b00: U4ML <= S0;
+			2'b01: U4ML <= S1;
+			2'b10: U4ML <= S2;
+			2'b11: U4ML <= S3;
+		endcase
+end
 //background layer output
 prom6301_3L U3L(
-	.addr({U3K_Q[7:4],U4KJ_Q[1:0],U4ML_2,U4ML_1}),
+	.addr({U3K_Q[7:4],U4KJ_Q[1:0],U4ML[1:0]}),
 	.clk(clkm_20MHZ),  ///clkm_20MHZ
 	.n_cs(1'b0), 
 	.q(ZC)
 );
 
 //CPUB (background layer) external I/O chip selects
-ls138x U3T( //#(.WIDTH_OUT(8), .DELAY_RISE(0), .DELAY_FALL(0)) 
-  .nE1(1'b0), //
-  .nE2(1'b0), //
-  .E3(PUR), //
-  .A(Z80B_addrbus[15:13]), //
-  .Y({U3T_Y7,U3T_Y6,BG_VDSP,BG_BUS,BG_IO2,BG_RAM,U3T_Y1,BG_PROM})
-);
+wire BG_PROM,BG_RAM,BG_IO2,BG_BUS,BG_VDSP;
+
+assign BG_PROM	 = (Z80B_addrbus[15:13] == 3'b000)	? 1'b0 : 1'b1; //0000 - 1FFF - Background Program ROM
+assign BG_RAM	 = (Z80B_addrbus[15:13] == 3'b010)	? 1'b0 : 1'b1; //4000 - 5FFF - Background Program RAM
+assign BG_IO2	 = (Z80B_addrbus[15:13] == 3'b011)	? 1'b0 : 1'b1; //6000 - 7FFF - IO
+assign BG_BUS	 = (Z80B_addrbus[15:13] == 3'b100)	? 1'b0 : 1'b1; //8000 - 9FFF - 
+assign BG_VDSP  = (Z80B_addrbus[15:13] == 3'b101)	? 1'b0 : 1'b1; //A000 - BFFF - 
 
 wire [7:0] BGRAM_out;
-wire BG_PROM,U3T_Y1,BG_RAM,BG_IO2,BG_BUS,BG_VDSP,U3T_Y6,U3T_Y7;
 
-//BG Z80B CPU work RAM
+//Background Z80B CPU work RAM
 m6116_ram U4V_Z80B_RAM(
 	.data(Z80B_databus_out),
 	.addr({Z80B_addrbus[10:0]}),
@@ -351,9 +333,6 @@ m6116_ram U4V_Z80B_RAM(
 	.nWE(Z80B_WR | BG_RAM), //write to main CPU work RAM
 	.q(U4V_Z80B_RAM_out)
 );
-
-assign Z80A_databus_in = rZ80A_databus_in;
-assign Z80B_databus_in = rZ80B_databus_in;
 
 //Z80A CPU main program program ROM
 eprom_8 prom_prog1
@@ -393,7 +372,7 @@ dpram_dc #(.widthad_a(11)) U4N_Z80A_RAM
 	.clock_a(clkm_20MHZ),
 	.address_a(Z80A_addrbus[10:0]),
 	.data_a(Z80A_databus_out),
-	.wren_a(!Z80_WR & !U3RA_Q[3]),
+	.wren_a(!Z80_WR & !ZA_RAM),
 	.q_a(U4N_Z80A_RAM_out),
 	
 	.clock_b(clkm_20MHZ),
@@ -403,44 +382,12 @@ dpram_dc #(.widthad_a(11)) U4N_Z80A_RAM
 	.q_b(hs_data_out)
 );
 
-
-//External Bus Selection Logic #1 for Sprite & Video RAM and IN1 (control panel), IN2(dip switch 1) & IN3 (dip switch 2)
-ls138x U3M(
-  .nE1(1'b0),
-  .nE2(U3RB_Q[2]),
-  .E3(PUR),
-  .A(Z80A_addrbus[13:11]),
-  .Y({U3M_Q7,IN3,IN2,IN1,U3M_Q3,U3M_Q2,RAMB,RAMA})
-);
-
-//Address decoder for IO1, IO2 & sound chips
-ls138x U3P(
-  .nE1(1'b0),
-  .nE2(U3RB_Q[3]),
-  .E3(PUR),
-  .A(Z80A_addrbus[13:11]),
-  .Y({U3P_Q7,U3P_Q6,U3P_Q5,U3P_Q4,U3P_Q3,U3P_Q2,IO2,IO1})
-);
-
-//sound chip selection logic
-assign IOA0 = !(Z80A_addrbus[0]|U3P_Q2);
-assign IOA1 = !(Z80A_addrbus[1]|U3P_Q2);
-assign IOA2 = !(Z80A_addrbus[0]|U3P_Q3);
-assign IOA3 = !(Z80A_addrbus[1]|U3P_Q3);
-
-assign RAMA_WR = RAMA|Z80_WR;
-assign RAMB_WR = RAMB|Z80_WR;
-
-wire RAMA,RAMB,IN1,IN2,IN3,IO1,IO2,IOA0,IOA1,IOA2,IOA3;
-wire U3M_Q2,U3M_Q3,U3M_Q7;
-wire U3P_Q2,U3P_Q3,U3P_Q4,U3P_Q5,U3P_Q6,U3P_Q7;
-
 ls138x U9R( 
   .nE1(~pixH[8]), 
   .nE2(~pixH[8]), 
   .E3(pixH[7]), 
   .A(pixH[6:4]), 
-  .Y({U9R_Q7,U9R_Q6,U9R_Q5,U9R_Q4,U9R_Q3,U9R_Q2,U9R_Q1,U9R_Q0})
+  .Y(U9R_Q) //U9R_Q4, U9R_Q5
 );
 
 wire u4ML_EN;
@@ -454,14 +401,7 @@ ttl_7474 #(.BLOCKS(1), .DELAY_RISE(0), .DELAY_FALL(0)) U8T_B(
 	.n_q(u4ML_EN)
 );
 
-//create SNHI output (Q1)
-ls138x U9S( //#(.WIDTH_OUT(8), .DELAY_RISE(0), .DELAY_FALL(0)) 
-  .nE1(~pixH[8]), 
-  .nE2(nVDSP), 
-  .E3(pixH[7]), 
-  .A({1'b0,1'b0,pixH[6]}), 
-  .Y({U9S_Q7,U9S_Q6,U9S_Q5,U9S_Q4,U9S_Q3,U9S_Q2,SNHI,U9S_Q0})
-);
+wire SNHI = ((pixH[8:6]==3'b111)&!nVDSP) ? 1'b0 : 1'b1;
 
 //VRAM
 m6116_ram U6N_VRAM(
@@ -473,16 +413,12 @@ m6116_ram U6N_VRAM(
 	.q(U6N_VRAM_Q)
 );	
 
-wire npixH;
-assign npixH=~pixH[2];
+always @(negedge pixH[2]) vramdata0out<=U6N_VRAM_Q;
 
-
-always @(posedge npixH) vramdata0out<=U6N_VRAM_Q;
-
-//forground character ROM
+//foreground character ROM
 eprom_7 u6k
 (
-	.ADDR({char_ROMA12,vramdata0out[7:4],pixelbusV[2:0],vramdata0out[3:0],pixelbusH[2]}),//
+	.ADDR({char_ROMA12,vramdata0out[7:4],rpixelbusV[2:0],vramdata0out[3:0],rpixelbusH[2]}),//
 	.CLK(clkm_20MHZ),//
 	.DATA(u6k_data),//
 	.ADDR_DL(dn_addr),
@@ -492,38 +428,28 @@ eprom_7 u6k
 	.WR(dn_wr)
 );
 
-wire npix1;
-assign npix1=~pixH[1];
+//wire npix1=~pixH[1];
 
-ls175 U7L(
-	.nMR(1'b0),
-	.clk(npix1),
-	.D({vramdata0out[7:4]}),
-	.Q({U7L_Q3,U7L_Q2,U7L_Q1,U7L_Q0}),
-	.nQ()
-);
+reg [3:0] U7L;
+reg [1:0] U8K;
 
-always @(posedge npix1) u7K_data <= u6k_data ;
+always @(negedge pixH[1]) begin
+	u7K_data <= u6k_data ;
+	U7L <= vramdata0out[7:4];
+end
 
-top_74ls153 U8K(
-	 .A(pixelbusH[0]),
-	 .B(pixelbusH[1]),
-	 .EN_n({1'b0,1'b0}),
-    .D1_0(u7K_data[0]),
-	 .D1_1(u7K_data[1]),
-	 .D1_2(u7K_data[2]),
-	 .D1_3(u7K_data[3]),
-    .D2_0(u7K_data[4]), 
-	 .D2_1(u7K_data[5]), 
-	 .D2_2(u7K_data[6]), 
-	 .D2_3(u7K_data[7]),
-    .Y1(U8K_1), 
-	 .Y2(U8K_2)
-);
+always @(*) begin //U5J
+	case (rpixelbusH[1:0])
+		2'b00: U8K <= {u7K_data[4],u7K_data[0]};
+		2'b01: U8K <= {u7K_data[5],u7K_data[1]};
+		2'b10: U8K <= {u7K_data[6],u7K_data[2]};
+		2'b11: U8K <= {u7K_data[7],u7K_data[3]};
+	endcase
+end
 
 //foreground / text / bullet layer output
 prom6301_L8 UL8(
-	.addr({U8L_A7,U8L_A6,U8K_2,U8K_1,U7L_Q3,U7L_Q2,U7L_Q1,U7L_Q0}),
+	.addr({U8L_A7,U8L_A6,U8K[1:0],U7L[3:0]}),
 	.clk(clkm_20MHZ),
 	.n_cs(1'b0), 
 	.q(ZA)
@@ -544,7 +470,7 @@ wire [3:0] ZC;
 	//utilized and the sprite layer is selected.
 	sp_clr_addr <= (ZB[3:0]) 		? 	{1'b1,ZB[3:0]}	: 5'b00000;
  end
- 
+
  always @(posedge clk2_6MHZ) begin
 
 	//the background layer is drawn when a background pixel is present.  The
@@ -555,7 +481,7 @@ wire [3:0] ZC;
  //send synchronized pixel to the screen
  always @(posedge clk2_6MHZ) begin 
 
-	nHDSP <= pixH<90 | pixH>437; //horizontal blanking
+	nHDSP <= pixH<107 | pixH>428; //horizontal blanking
 	nVDSP <= pixV<16 | pixV>239;  //vertical blanking
 
 	
@@ -576,8 +502,7 @@ prom6331_E1 UE1(
 
 wire rSSEL;
 
-wire r2UP; //flips the screen - removed logic to help with debugging
-assign r2UP=1'b0;
+reg r2UP,nr2UP; //player 2 active (flips controls & screen logic)
 
 wire [8:0] pixHcntz;
 wire [7:0] pixVcntz;
@@ -585,8 +510,8 @@ wire [7:0] pixVcntz;
 reg char_ROMA12, U8L_A6, U8L_A7, CD4,CD5;
 
 always @(posedge IO1) begin
-//	r2UP<=1'b1;
-//	//r2UP<=Z80A_databus_out[0];
+	r2UP<=Z80A_databus_out[0];			//screen inversion for player 2
+	nr2UP<=!Z80A_databus_out[0];
 	U8L_A6<=Z80A_databus_out[1];
 	U8L_A7<=Z80A_databus_out[2];
 	char_ROMA12<=Z80A_databus_out[3];
@@ -613,22 +538,25 @@ always @(posedge clk2_6MHZ) begin
 
 	spnH4CA<=~&pixH[4:1];
 	spnH8CA<=~&pixH[8:5];
+
 end
 
-assign	rSSEL = U9R_Q4|nVDSP;  //used to load the per line memory location for the background layer 
-assign	U7V_q = (rSSEL) ? {Z80B_addrbus[3:0]} : {pixH[3:0]};	
+wire [3:0] U7V_q;
+assign	rSSEL 	= U9R_Q[4]|nVDSP;  //used to load the per line memory location for the background layer 
+assign	U7V_q 	= (rSSEL) ? {Z80B_addrbus[3:0]} : {pixH[3:0]};	
+assign	vramaddr = (RAMA) ? {rpixelbusV[7:3],rpixelbusH[8:3]} : Z80A_addrbus[10:0];
 
-wire [3:0] U7V_q;	
+always @(*) begin
+  if (r2UP) begin
+	rpixelbusH <= ~pixH;
+	rpixelbusV <= ~pixV;  
+  end
+  else begin
+	rpixelbusH <= pixH;
+	rpixelbusV <= pixV;  
+  end
+end
 
-assign vramaddr = (RAMA) ? {rpixelbusV[7:3],rpixelbusH[8:3]} :
-									{Z80A_addrbus[10:0]};
-
-assign	rpixelbusH = pixH;
-assign	rpixelbusV = pixV;
-
-assign pixelbusH = rpixelbusH;
-assign pixelbusV = rpixelbusV;
-		
 /* SPRITE VIB-B BOARD IMPLEMENTATION */
 //The 10Mhz, 6Mhz and offset 6Mhz clocks are used to draw the sprites
 //sprite RAM
@@ -683,27 +611,23 @@ reg [7:0] U8H_Q;
 
 always @(negedge U12H_cnt[1]) U8H_Q<=sprom_data;
 
-wire U11J_1, U11J_2;
-top_74ls153 U11J(
-	 .A(sROM_bitA),
-	 .B(sROM_bitB),
-	 .EN_n({ERS,ERS}),
-    .D1_0(U8H_Q[0]),
-	 .D1_1(U8H_Q[1]),
-	 .D1_2(U8H_Q[2]),
-	 .D1_3(U8H_Q[3]),
-    .D2_0(U8H_Q[4]), 
-	 .D2_1(U8H_Q[5]), 
-	 .D2_2(U8H_Q[6]), 
-	 .D2_3(U8H_Q[7]),
-    .Y1(U11J_1), 
-	 .Y2(U11J_2)
-);
+reg [1:0] U11J;
+always @(*) begin 
+   if (ERS) 
+        {U11J}  <= 2'b00;
+	else
+		case ({sROM_bitB,sROM_bitA})
+			2'b00: {U11J} <= {U8H_Q[4],U8H_Q[0]};
+			2'b01: {U11J} <= {U8H_Q[5],U8H_Q[1]};
+			2'b10: {U11J} <= {U8H_Q[6],U8H_Q[2]};
+			2'b11: {U11J} <= {U8H_Q[7],U8H_Q[3]};
+		endcase
+end
 
 wire [3:0] U10H_data;
 
 prom6301_H10 U10H(
-	.addr({CD5,CD4,U11J_2,U11J_1,CD3,CD2,CD1,CD0}),
+	.addr({CD5,CD4,U11J[1:0],CD3,CD2,CD1,CD0}),
 	.clk(clkm_20MHZ),
 	.n_cs(1'b0), 
 	.q({U10H_data})
@@ -712,49 +636,26 @@ prom6301_H10 U10H(
 reg [3:0] spbitdata_10;
 reg [3:0] spbitdata_11;
 
-reg U9H_A_nq,U9F_A_q;
+reg U9H_A_nq,U9F_A_q,U9F_B_nq;
 wire U9H_d;
 
-assign U9H_d = U11J_2|U11J_1;
+assign U9H_d = |U11J;
 
 
 always @(posedge clk1_10MHZ) U9H_A_nq <= 	~U9H_d;
 
 always @(posedge clk1_10MHZ) begin
-	spbitdata_11 <= (pixV[0]) ? 4'b0000 : U10H_data;
-	spbitdata_10 <= (pixV[0]) ? U10H_data :4'b0000 ;
+	spbitdata_11 <= (rpixelbusV[0]) ? 4'b0000 : U10H_data;
+	spbitdata_10 <= (rpixelbusV[0]) ? U10H_data :4'b0000 ;
 end
 
 
 always @(posedge U10nRCO or negedge RAMB or negedge spRAMsel) U9F_A_q <= 	(!RAMB) ?	1'b1 : (!spRAMsel) ? 1'b0 : spRAMsel;
+always @(posedge spnH4CA or negedge RAMB) U9F_B_nq <= 	~((!RAMB) ?	1'b1 : spnH8CA);
 
-reg U9F_B_nq;
-always @(posedge spnH4CA or negedge RAMB) begin
-	U9F_B_nq <= 	~((!RAMB) ?	1'b1 : spnH8CA);
-end
+wire [8:0] U12_sum;
 
-wire [3:0] U12R_sum;
-wire [3:0] U12S_sum;
-wire U12R_cout;
-
-reg [7:0] rPixelBusV1;
-
-ttl_74283 #(.WIDTH(4), .DELAY_RISE(0), .DELAY_FALL(0)) U12R(
-	.a(rSPRITE_databus[3:0]),
-	.b(pixV[3:0]),
-	.c_in(PUR),  
-	.sum(U12R_sum),
-	.c_out(U12R_cout)
-);
-
-ttl_74283 #(.WIDTH(4), .DELAY_RISE(0), .DELAY_FALL(0)) U12S(
-
-	.a({rSPRITE_databus[7:4]}),
-	.b({pixV[7:4]}),
-	.c_in(U12R_cout),
-	.sum(U12S_sum),
-	.c_out()
-);
+assign  U12_sum = {1'b0, rSPRITE_databus} + {1'b0, rpixelbusV} + 1'b1;
 
 //sprite control signals
 reg U12P_H0,U12P_CA0,U12P_CA1,U12P_Y2,U12P_BIG,U12P_UDPNT,U12P_RLINV,U12P_UDINV;
@@ -769,8 +670,8 @@ reg [3:0] U12U_Q;
 reg [3:0] U12T_Q;
 
 always @(negedge P2) begin
-	U12U_Q <= (U12P_BIG) ? {U12S_sum[0],U12R_sum[3],U12R_sum[2],U12R_sum[1]} : U12R_sum; //U12U
-	U12T_Q <= (U12P_BIG) ? {1'b0,U12S_sum[3],U12S_sum[2],U12S_sum[1]}        : U12S_sum; //U12T
+	U12U_Q <= (U12P_BIG) ? {U12_sum[4:1]} 			: U12_sum[3:0]; //U12U
+	U12T_Q <= (U12P_BIG) ? {1'b0,U12_sum[7:5]}	: U12_sum[7:4]; //U12T
 end
 
 reg U11V_ZB,CAD9;
@@ -783,15 +684,15 @@ reg sp11_UD,sp11_nLD,sp11_CK,sp11_WE;
 //sprite ram bit selection logic - U11E feeds the _10 bus
 
 always @(*) begin
-		sp10_WE  <= pixV[0] ? (clk1_10MHZ|U9H_A_nq|U9F_A_q) : clk2_6MHZ;
-		sp10_CK  <= pixV[0] ? (clk1_10MHZ|U9F_B_nq|U9F_A_q) : clk2_6MHZ;
-		sp10_nLD <= pixV[0] ? U10nRCO : 1'b1;
-		sp11_WE  <= pixV[0] ? clk2_6MHZ : (clk1_10MHZ|U9H_A_nq|U9F_A_q);
-		sp11_CK  <= pixV[0] ? clk2_6MHZ : (clk1_10MHZ|U9F_B_nq|U9F_A_q);
-		sp11_nLD <= pixV[0] ? 1'b1 : U10nRCO;
+		sp10_WE  <= rpixelbusV[0] ? (clk1_10MHZ|U9H_A_nq|U9F_A_q) : clk2_6MHZ;
+		sp10_CK  <= rpixelbusV[0] ? (clk1_10MHZ|U9F_B_nq|U9F_A_q) : clk2_6MHZ;
+		sp10_nLD <= rpixelbusV[0] ? U10nRCO : 1'b1;
+		sp11_WE  <= rpixelbusV[0] ? clk2_6MHZ : (clk1_10MHZ|U9H_A_nq|U9F_A_q);
+		sp11_CK  <= rpixelbusV[0] ? clk2_6MHZ : (clk1_10MHZ|U9F_B_nq|U9F_A_q);
+		sp11_nLD <= rpixelbusV[0] ? 1'b1 : U10nRCO;
 
-		sp10_UD  <= 1'b1; //( rpixelbusV[0])  ? 1'b1 : nr2UP;
-		sp11_UD  <= 1'b1; //(!rpixelbusV[0])  ? 1'b1 : nr2UP;		
+		sp10_UD  <= ( rpixelbusV[0])  ? 1'b1 : nr2UP; //1'b1; 
+		sp11_UD  <= (!rpixelbusV[0])  ? 1'b1 : nr2UP; //1'b1; 		
 end
 
 reg [8:0] spramaddrb_10_cnt;
@@ -808,7 +709,7 @@ always @(posedge sp11_CK) spramaddrb_11_cnt = spramaddrb_11_up;
 wire [3:0] spram_out_10;
 wire [3:0] spram_out_11;
 
-always @(posedge clk2_6MHZ) {ZB} <= (pixV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
+always @(posedge clk2_6MHZ) {ZB} <= (rpixelbusV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
 
 always @(negedge clk1_10MHZ) begin
 	U10nRCO<=!(spramaddr_cnt[0]&spramaddr_cnt[1]&spramaddr_cnt[2]&spramaddr_cnt[3]);
@@ -880,7 +781,6 @@ reg U10nRCO=1'b1;
 reg [7:0] rSPRITE_databus;
 
 // *************** SOUND CHIPS *****************
-wire U1D_B_nq,U1D_B_q;
 wire [7:0] AY_12V_ioa_in;
 wire [7:0] AY_12V_ioa_out;
 wire [7:0] AY_12V_iob_in;
@@ -889,55 +789,10 @@ wire [7:0] AY_12V_iob_out;
 wire [7:0] AY_12F_databus_out;
 wire [7:0] AY_12V_databus_out;
 
-
-ttl_7474 #(.BLOCKS(1), .DELAY_RISE(0), .DELAY_FALL(0)) U1D_B(
-	.n_pre(PUR),
-	.n_clr(PUR),
-	.d(U1D_B_nq),
-	.clk(clk3_3MHZ),
-	.q(U1D_B_q),
-	.n_q(U1D_B_nq)
-);
-
-wire [9:0] pre_sndl;
-wire [9:0] pre_sndr;
-wire [7:0] ay12F_araw, ay12F_braw, ay12F_craw;
-wire [7:0] ay12V_araw, ay12V_braw, ay12V_craw;
-wire signed [15:0] ay12F_adcrm, ay12F_bdcrm, ay12F_cdcrm;
-
 wire AY12F_sample,AY12V_sample;
 wire [9:0] sound_outF;
 wire [9:0] sound_outV;
 
-//SLAPFIGHT CLOCKS
-reg clkf_cpu, maincpuclk_6M, aucpuclk_3M, aucpuclk_3Mb, ayclk_1p66;
-reg clk_6M_1,pixel_clk,clk_6M_3;
-
-//core clock generation logic based on jtframe code
-reg [4:0] cencnt =5'd0;
-
-always @(posedge clkaudio) begin
-	cencnt  <= cencnt+5'd1;
-end
-
-always @(posedge clkaudio) begin
-//	clkm_24MHZ	  	<= cencnt[0]   == 1'd0;
-//	clkf_cpu			<= cencnt[1:0] == 2'd0;
-//	maincpuclk_6M  <= cencnt[2:0] == 3'd0;
-//	clk_6M_1			<= cencnt[2:0] == 3'd0;
-//	pixel_clk		<= cencnt[2:0] == 3'd2;
-//	clk_6M_3		 	<= cencnt[2:0] == 3'd4;
-//  aucpuclk_3M		<= cencnt[3:0] == 4'd0;
-//   aucpuclk_3Mb  	<= cencnt[3:0] == 4'h8;
-   ayclk_1p66 		<= cencnt[4:0] == 5'd0;		
-end
-
-//assign core_pix_clk=pixel_clk;
-
-//always @(posedge clkaudio) begin
-//	audio_l <= ({1'd0, sound_outF, 5'd0});
-//	audio_r <= ({1'd0, sound_outV, 5'd0});
-//end
 
 jt49_bus AY_12F(
     .rst_n(RESET_n),
@@ -1080,15 +935,10 @@ eprom_4 bg_gfx4H
 
 reg [7:0] U5B_out,U5D_out,U5E_out,U5H_out;
 
-reg U7A_Bnq,U7A_Aq;
-
 wire L4B_clk1,L4B_clk2;
 wire L4D_clk1,L4D_clk2;
 wire L4E_clk1,L4E_clk2;
 wire L4H_clk1,L4H_clk2;
-
-wire nr2UP;
-not (nr2UP,r2UP);
 
 assign L4B_clk1 = (nr2UP^BG4BaddrL[4]);
 assign L4B_clk2 = (nr2UP^BG4BaddrL[1]);
@@ -1104,177 +954,113 @@ always @(posedge L4D_clk2) U5D_out<=bg_gfx4D_out;
 always @(posedge L4E_clk2) U5E_out<=bg_gfx4E_out; 
 always @(posedge L4H_clk2) U5H_out<=bg_gfx4H_out;
 
-wire U6A_QA,U6A_QB,U6A_QC,U6A_QD;
-wire U8A_QA,U8A_QB,U8A_QC,U8A_QD;
-
-reg [4:0] store_L8, store_L9, store_L10, store_L11;
-reg [4:0] store_H8, store_H9, store_H10, store_H11;
-reg SLD8os,SLD9os,SLD10os,SLD11os;
-reg SLD8os_clr,SLD9os_clr,SLD10os_clr,SLD11os_clr;
-reg [4:0] counterL8, counterL9, counterL10, counterL11;
-reg [4:0] counterU8, counterU9, counterU10, counterU11;
-reg zL4B_clk2,zL4D_clk2,zL4E_clk2,zL4H_clk2;
-	
-	
 assign SLSE = clk2_6MHZ|rSSEL; 
 
-always @(negedge SLD8) begin
-	store_L8 <= ({1'b0,BGRAM_out[3:0]});
-	store_H8 <= ({1'b0,BGRAM_out[7:4]});
-end
-	
-always @(negedge SLD9) begin
-	store_L9 <= ({1'b0,BGRAM_out[3:0]});
-	store_H9 <= ({1'b0,BGRAM_out[7:4]});
-end
-	
-always @(negedge SLD10) begin
-	store_L10 <= ({1'b0,BGRAM_out[3:0]});
-	store_H10 <= ({1'b0,BGRAM_out[7:4]});
-end 
-	
-always @(negedge SLD11) begin
-	store_L11 <= ({1'b0,BGRAM_out[3:0]});
-	store_H11 <= ({1'b0,BGRAM_out[7:4]});
-end
-	
-always @(posedge clkm_20MHZ) begin
-
-	BG4BaddrLD <= (!SLD0) ? BGRAM_out : (!rSSEL) ? BG4BaddrL : BG4BaddrLz;
-	BG4DaddrLD <= (!SLD2) ? BGRAM_out : (!rSSEL) ? BG4DaddrL : BG4DaddrLz;
-	BG4EaddrLD <= (!SLD4) ? BGRAM_out : (!rSSEL) ? BG4EaddrL : BG4EaddrLz;			
-	BG4HaddrLD <= (!SLD6) ? BGRAM_out : (!rSSEL) ? BG4HaddrL : BG4HaddrLz;
-			
-	//display 'slice' of background bitmap #1
-	ena_4B_1 <=  (&counterL8[3:0] )|counterL8[4];
-	dis_4B_1 <=  (&counterU8[3:0] )|counterU8[4]; 
-	if (L4B_clk2&!zL4B_clk2) ena_4B<=!(ena_4B_1^dis_4B_1);
-	SLD8os   <= (!SLD8|SLD8os)&!SLD8os_clr;
-
-	//display 'slice' of background bitmap #2	
-	ena_4D_1 <=  (&counterL9[3:0])|counterL9[4];
-	dis_4D_1 <=  (&counterU9[3:0])|counterU9[4];
-	if (L4D_clk2&!zL4D_clk2) ena_4D<=!(ena_4D_1^dis_4D_1);
-	SLD9os   <= (!SLD9|SLD9os)&!SLD9os_clr;
-
-	//display 'slice' of background bitmap #3	
-	ena_4E_1 <=  (&counterL10[3:0])|counterL10[4];
-	dis_4E_1 <=  (&counterU10[3:0])|counterU10[4];
-	if (L4E_clk2&!zL4E_clk2) ena_4E<=!(ena_4E_1^dis_4E_1);
-	SLD10os   <= (!SLD10|SLD10os)&!SLD10os_clr;		
-
-	//display 'slice' of background bitmap #4	
-	ena_4H_1 <=  (&counterL11[3:0])|counterL11[4];
-	dis_4H_1 <=  (&counterU11[3:0])|counterU11[4];
-	if (L4H_clk2&!zL4H_clk2) ena_4H<=!(ena_4H_1^dis_4H_1);
-	SLD11os   <= (!SLD11|SLD11os)&!SLD11os_clr;	
-
-	zL4B_clk2<=L4B_clk2;
-	zL4D_clk2<=L4D_clk2;
-	zL4E_clk2<=L4E_clk2;
-	zL4H_clk2<=L4H_clk2;
-
-		  
-end
-
-always @(posedge L4B_clk1) begin
-  counterL8 <= (SLD8os)   ? store_L8  : counterL8+5'd1;
-  counterU8 <= (SLD8os)   ? store_H8  : counterU8+5'd1;
-  SLD8os_clr<=SLD8os; //clear one shot 
-end
-
-always @(posedge L4D_clk1) begin
-  counterL9 <= (SLD9os)   ? store_L9  : counterL9+5'd1;
-  counterU9 <= (SLD9os)   ? store_H9  : counterU9+5'd1;
-  SLD9os_clr<=SLD9os;
-end
-
-always @(posedge L4E_clk1) begin
-  counterL10 <= (SLD10os)   ? store_L10  : counterL10+5'd1;
-  counterU10 <= (SLD10os)   ? store_H10  : counterU10+5'd1;
-  SLD10os_clr<=SLD10os;
-end
-
-always @(posedge L4H_clk1) begin
-  counterL11 <= (SLD11os)   ? store_L11  : counterL11+5'd1;
-  counterU11 <= (SLD11os)   ? store_H11  : counterU11+5'd1;
-  SLD11os_clr<=SLD11os;
-end
-
-reg ena_4B,ena_4D,ena_4E,ena_4H;
-reg dis_4B,dis_4D,dis_4E,dis_4H;
-reg ena_4B_1,ena_4D_1,ena_4E_1,ena_4H_1;
-reg dis_4B_1,dis_4D_1,dis_4E_1,dis_4H_1;
-wire SA0,SA1,SA2,SA3;
-wire SB0,SB1,SB2,SB3;
-
-mux4_2n U5A(
-    .EN_n(ena_4B),
-    .A(BG4BaddrL[0]), 
-	 .B(BG4BaddrL[1]),
-    .D0({U5B_out[0],U5B_out[4]}), 
-	 .D1({U5B_out[1],U5B_out[5]}), 
-	 .D2({U5B_out[2],U5B_out[6]}), 
-	 .D3({U5B_out[3],U5B_out[7]}),
-    .Y({SA0,SB0})
+wire ena_4B,ena_4D,ena_4E,ena_4H;
+ 
+async_preset_counter L8(
+    .clk1(L4B_clk1),      			// Clock input
+	 .clk2(L4B_clk2),      			// Clock input
+    .load(!SLD[8]),     			// Async load input to preset the counter
+    .preset_value(BGRAM_out), 	// 5-bit preset value
+    .ena_bg(ena_4B)
 );
 
-mux4_2n U5C(
-    .EN_n(ena_4D),
-    .A(BG4DaddrL[0]), 
-	 .B(BG4DaddrL[1]),
-    .D0({U5D_out[0],U5D_out[4]}), 
-	 .D1({U5D_out[1],U5D_out[5]}), 
-	 .D2({U5D_out[2],U5D_out[6]}), 
-	 .D3({U5D_out[3],U5D_out[7]}),
-    .Y({SA1,SB1})
+async_preset_counter L9(
+    .clk1(L4D_clk1),      			// Clock input
+    .clk2(L4D_clk2),      			// Clock input	 
+    .load(!SLD[9]),     			// Async load input to preset the counter
+    .preset_value(BGRAM_out), 	// 5-bit preset value
+    .ena_bg(ena_4D)
 );
 
-mux4_2n U5F(
-    .EN_n(ena_4E),
-    .A(BG4EaddrL[0]), 
-	 .B(BG4EaddrL[1]),
-    .D0({U5E_out[0],U5E_out[4]}), 
-	 .D1({U5E_out[1],U5E_out[5]}), 
-	 .D2({U5E_out[2],U5E_out[6]}), 
-	 .D3({U5E_out[3],U5E_out[7]}),
-    .Y({SA2,SB2})
+async_preset_counter L10(
+    .clk1(L4E_clk1),      			// Clock input
+    .clk2(L4E_clk2),      			// Clock input	 
+    .load(!SLD[10]),     			// Async load input to preset the counter
+    .preset_value(BGRAM_out), 	// 5-bit preset value
+    .ena_bg(ena_4E)
 );
 
-mux4_2n U5J(
-    .EN_n(ena_4H),
-    .A(BG4HaddrL[0]), 
-	 .B(BG4HaddrL[1]),
-    .D0({U5H_out[0],U5H_out[4]}), 
-	 .D1({U5H_out[1],U5H_out[5]}), 
-	 .D2({U5H_out[2],U5H_out[6]}), 
-	 .D3({U5H_out[3],U5H_out[7]}),
-    .Y({SA3,SB3})
+async_preset_counter L11(
+    .clk1(L4H_clk1),      			// Clock input
+    .clk2(L4H_clk2),      			// Clock input	 
+    .load(!SLD[11]),     			// Async load input to preset the counter
+    .preset_value(BGRAM_out), 	// 5-bit preset value
+    .ena_bg(ena_4H)
 );
+
+reg [1:0] S0,S1,S2,S3;
+
+always @(*) begin
+   if (ena_4B) 
+        {S0}  <= 2'b00;
+	else
+		case (BG4BaddrL[1:0])
+			2'b00: {S0} <= {U5B_out[4],U5B_out[0]};
+			2'b01: {S0} <= {U5B_out[5],U5B_out[1]};
+			2'b10: {S0} <= {U5B_out[6],U5B_out[2]};
+			2'b11: {S0} <= {U5B_out[7],U5B_out[3]};
+		endcase
+end
+
+always @(*) begin //U5C
+   if (ena_4D) 
+        {S1}  <= 2'b00;
+	else
+		case (BG4DaddrL[1:0])
+			2'b00: {S1} <= {U5D_out[4],U5D_out[0]};
+			2'b01: {S1} <= {U5D_out[5],U5D_out[1]};
+			2'b10: {S1} <= {U5D_out[6],U5D_out[2]};
+			2'b11: {S1} <= {U5D_out[7],U5D_out[3]};
+		endcase
+end
+
+always @(*) begin //U5F
+   if (ena_4E)
+        {S2}  <= 2'b00;
+	else
+		case (BG4EaddrL[1:0])
+			2'b00: {S2} <= {U5E_out[4],U5E_out[0]};
+			2'b01: {S2} <= {U5E_out[5],U5E_out[1]};
+			2'b10: {S2} <= {U5E_out[6],U5E_out[2]};
+			2'b11: {S2} <= {U5E_out[7],U5E_out[3]};
+		endcase
+end
+
+always @(*) begin //U5J
+   if (ena_4H)
+        {S3}  <= 2'b00;
+	else
+		case (BG4HaddrL[1:0])
+			2'b00: {S3} <= {U5H_out[4],U5H_out[0]};
+			2'b01: {S3} <= {U5H_out[5],U5H_out[1]};
+			2'b10: {S3} <= {U5H_out[6],U5H_out[2]};
+			2'b11: {S3} <= {U5H_out[7],U5H_out[3]};
+		endcase
+end
 
 reg [7:0] BG4BaddrL,BG4BaddrH,BG4DaddrL,BG4DaddrH,BG4EaddrL,BG4EaddrH,BG4HaddrL,BG4HaddrH;
-reg [7:0] BG4BaddrLD,BG4DaddrLD,BG4EaddrLD,BG4HaddrLD;
-reg [7:0] BG4BaddrLz,BG4DaddrLz,BG4EaddrLz,BG4HaddrLz;
 
-always @(negedge SLD1) BG4BaddrH <= BGRAM_out;
-always @(negedge SLD3) BG4DaddrH <= BGRAM_out;
-always @(negedge SLD5) BG4EaddrH <= BGRAM_out;
-always @(negedge SLD7) BG4HaddrH <= BGRAM_out;
+always @(negedge SLD[1]) BG4BaddrH <= BGRAM_out;
+always @(negedge SLD[3]) BG4DaddrH <= BGRAM_out;
+always @(negedge SLD[5]) BG4EaddrH <= BGRAM_out;
+always @(negedge SLD[7]) BG4HaddrH <= BGRAM_out;
+
+
+reg [7:0] BG4BaddrL_base,BG4DaddrL_base,BG4EaddrL_base,BG4HaddrL_base;
+
+always @(posedge SLD[0]) BG4BaddrL_base <= BGRAM_out;
+always @(posedge SLD[2]) BG4DaddrL_base <= BGRAM_out;
+always @(posedge SLD[4]) BG4EaddrL_base <= BGRAM_out;
+always @(posedge SLD[6]) BG4HaddrL_base <= BGRAM_out;
 
 always @(posedge clk2_6MHZ) begin
-	BG4BaddrL<=BG4BaddrLD;
-	BG4DaddrL<=BG4DaddrLD;
-	BG4EaddrL<=BG4EaddrLD;
-	BG4HaddrL<=BG4HaddrLD;
+	BG4BaddrL <= (rSSEL) ?   (r2UP) ? BG4BaddrL-8'd1 : BG4BaddrL+8'd1 : BG4BaddrL_base;
+	BG4DaddrL <= (rSSEL) ?   (r2UP) ? BG4DaddrL-8'd1 : BG4DaddrL+8'd1 : BG4DaddrL_base;
+	BG4EaddrL <= (rSSEL) ?   (r2UP) ? BG4EaddrL-8'd1 : BG4EaddrL+8'd1 : BG4EaddrL_base;
+	BG4HaddrL <= (rSSEL) ?   (r2UP) ? BG4HaddrL-8'd1 : BG4HaddrL+8'd1 : BG4HaddrL_base;
 end
-
-always @(negedge clk2_6MHZ) begin
-	BG4BaddrLz<=BG4BaddrL+8'd1;
-	BG4DaddrLz<=BG4DaddrL+8'd1;
-	BG4EaddrLz<=BG4EaddrL+8'd1;
-	BG4HaddrLz<=BG4HaddrL+8'd1;
-end
-
 
 ls89_ram_x2 U6UT_BG_RAM(
 	.data(Z80B_databus_out),
@@ -1302,7 +1088,7 @@ m2511_ram_4 sprites_11(
 );
 
 //  ****** FINAL 7-BIT ANALOGUE OUTPUT *******
-assign	H_SYNC = !U9R_Q5;								//horizontal sync
+assign	H_SYNC = !U9R_Q[5];								//horizontal sync
 assign	V_SYNC = ((!(&pixV[7:3]))|pixV[2]); 	//vertical sync
 
 endmodule

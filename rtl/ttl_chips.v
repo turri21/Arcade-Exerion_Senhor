@@ -221,8 +221,52 @@ assign Y = Q;
 
 endmodule
 
+module async_preset_counter (
+    input wire clk1,          // Clock input
+    input wire clk2,          // Clock input	 
+    input wire load,         // Async load input to preset the counter
+    input wire [7:0] preset_value, // 5-bit preset value
+//    output wire [4:0] count_LO,  // 5-bit counter output
+//    output wire [4:0] count_HI,  // 5-bit counter output	
+	 output wire ena_bg 
+);
 
+reg [4:0] count_regl;      // 5-bit counter register
+reg [4:0] count_regh;      // 5-bit counter register
+reg [4:0] store_LO;
+reg [4:0] store_HI;
+reg one_shot;
+reg one_shot_clear;            
+reg enable_gfx;
+reg disable_gfx;
+reg ena;
 
+always @(*) begin
+		enable_gfx  <=  (&count_regl[3:0] )|count_regl[4];
+		disable_gfx <=  (&count_regh[3:0] )|count_regh[4]; 
+		one_shot <= (load|one_shot)&!one_shot_clear;
+end
+
+always @(posedge clk1) begin
+	 // Increment the counter on each clock edge
+	 count_regl <= (one_shot) ? store_LO : count_regl+1 ;
+	 count_regh <= (one_shot) ? store_HI : count_regh+1 ;		 
+	 one_shot_clear<=one_shot; //clear one shot 
+end
+
+//assign count_LO = count_regl; // Output the counter value
+//assign count_HI = count_regh; // Output the counter value
+
+always @(posedge load) begin
+	store_LO <= ({1'b0,preset_value[3:0]});
+	store_HI <= ({1'b0,preset_value[7:4]});
+end
+
+always @(posedge clk2) ena<=!(enable_gfx^disable_gfx);
+
+assign ena_bg=ena;
+
+endmodule
 
 
 // Dual D flip-flop with set and clear; positive-edge-triggered

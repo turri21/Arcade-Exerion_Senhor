@@ -243,8 +243,6 @@ set_hps_location_assignment HPSINTERFACEPERIPHERALSPIMASTER_X52_Y72_N111 -to spi
 set_hps_location_assignment HPSINTERFACEPERIPHERALUART_X52_Y67_N111 -to uart
 set_hps_location_assignment HPSINTERFACEPERIPHERALI2C_X52_Y60_N111 -to hdmi_i2c
 set_global_assignment -name PRE_FLOW_SCRIPT_FILE "quartus_sh:sys/build_id.tcl"
-set_global_assignment -name CDF_FILE jtag.cdf
-set_global_assignment -name QIP_FILE sys/sys.qip
 source sys/sys_analog.tcl
 set_location_assignment PIN_AF25 -to SDIO_DAT[0]
 set_location_assignment PIN_AF23 -to SDIO_DAT[1]
@@ -295,33 +293,17 @@ set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to LED_*
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to BTN_*
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to BTN_*
 source files.qip
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/rom_loader.sv
-set_global_assignment -name VERILOG_FILE rtl/ttl_chips.v
-set_global_assignment -name VERILOG_FILE rtl/exer_ram.v
-set_global_assignment -name VERILOG_FILE rtl/exer_roms.v
-set_global_assignment -name VERILOG_FILE rtl/excore.v
-set_global_assignment -name VERILOG_FILE rtl/hiscore.v
-set_global_assignment -name VERILOG_FILE rtl/pause.v
-set_global_assignment -name VHDL_FILE rtl/dpram_dc.vhd
-set_global_assignment -name VERILOG_FILE rtl/jt49/jt49_bus.v
-set_global_assignment -name VERILOG_FILE rtl/jt49/jt49.v
-set_global_assignment -name VERILOG_FILE rtl/jt49/jt49_noise.v
-set_global_assignment -name VERILOG_FILE rtl/jt49/jt49_exp.v
-set_global_assignment -name VERILOG_FILE rtl/jt49/jt49_eg.v
-set_global_assignment -name VERILOG_FILE rtl/jt49/jt49_div.v
-set_global_assignment -name VERILOG_FILE rtl/jt49/jt49_cen.v
-set_global_assignment -name VERILOG_FILE rtl/jt49/filter/jt49_dcrm2.v
-set_global_assignment -name VHDL_FILE rtl/T80/T80as.vhd
-set_global_assignment -name VHDL_FILE rtl/T80/T80.vhd
-set_global_assignment -name VHDL_FILE rtl/T80/T80_Reg.vhd
-set_global_assignment -name VHDL_FILE rtl/T80/T80_MCode.vhd
-set_global_assignment -name VHDL_FILE rtl/T80/T80_ALU.vhd
-set_global_assignment -name VHDL_FILE rtl/T80/T80_Pack.vhd
-set_global_assignment -name VERILOG_FILE rtl/jtframe_dcrm.v
-set_global_assignment -name VERILOG_FILE rtl/jtframe_fir.v
-set_global_assignment -name VERILOG_FILE rtl/jtframe_jt49_filters.v
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"
+set_global_assignment -name TOP_LEVEL_ENTITY sys_top
+set_global_assignment -name ENABLE_SIGNALTAP ON
+set_global_assignment -name USE_SIGNALTAP_FILE stp1.stp
 set_global_assignment -name SYSTEMVERILOG_FILE "Arcade-Exerion.sv"
 set_global_assignment -name SDC_FILE "Arcade-Exerion.sdc"
-set_global_assignment -name LAST_QUARTUS_VERSION "17.0.0 Lite Edition"
-set_global_assignment -name TOP_LEVEL_ENTITY sys_top
+set_global_assignment -name QIP_FILE rtl/index.qip
+set_global_assignment -name QIP_FILE "modules/cpu-t80/index.qip"
+set_global_assignment -name QIP_FILE "modules/sound-jt49/index.qip"
+set_global_assignment -name QIP_FILE sys/sys.qip
+set_global_assignment -name CDF_FILE jtag.cdf
+set_global_assignment -name SIGNALTAP_FILE stp1.stp
+set_global_assignment -name SLD_FILE db/stp1_auto_stripped.stp
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

@@ -1,0 +1,17 @@
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "excore.v"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "exer_ram.v"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "exer_roms.v"]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) "rom_loader.sv"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "ttl_chips.v"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "hiscore.v"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "pause.v"]
+set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) "dpram_dc.vhd"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "jtframe_dcrm.v"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "jtframe_fir.v"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "jtframe_jt49_filters.v"]
+
+
+
+
+
+

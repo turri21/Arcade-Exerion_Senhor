@@ -14,6 +14,7 @@
 		<dip bits="8,10" name="Space Fighters" ids="1,2,3,4,5A,5B,5C,Free"/>
 		<dip bits="11,12" name="Bonus Score" ids="10000,20000,30000,40000"/>
 		<dip bits="13,14" name="Difficulty" ids="EASY,Hard,Harder,Hardest"/>
+		<dip bits="15" name="Cocktail" ids="No,Yes"/>
 		<dip bits="16,18" name="Credit" ids="1 Coin/1 Play,1 Coin/2 Play,1 Coin/3 Play,1 Coin/4 Play,2 Coin/1 Play,3 Coin/1 Play,4 Coin/1 Play,5 Coin/1 Play"/>
 	</switches>
 	<rom index="0" md5="none" zip="exerion.zip|exeriont.zip" type="merged|nonmerged">
