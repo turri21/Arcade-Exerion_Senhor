@@ -93,7 +93,7 @@ module emu
 	// b[0]: osd button
 	output  [1:0] BUTTONS,
 
-	input         CLK_AUDIO, // 24.576 MHz
+	input         CLK_AUDIO, // 24.576 MHz 
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
 	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
@@ -180,10 +180,7 @@ assign HDMI_FREEZE = 0;
 assign VGA_DISABLE = 0;
 assign FB_FORCE_BLANK = 0;
 
-wire [9:0] snd_right;
-wire [9:0] snd_left;
-
-assign AUDIO_S = 0;//signed for audio out
+assign AUDIO_S = 1;//signed for audio out
 assign AUDIO_MIX = 3;
 
 assign LED_DISK = 0;
@@ -218,10 +215,9 @@ wire [21:0] gamma_bus;
 
 //////////////////////////////////////////////////////////////////
 
-wire [1:0] ar = status[20:19];
 
-assign VIDEO_ARX = (!ar) ? ((status[2])  ? 8'd10 : 8'd7) : (ar - 1'd1);
-assign VIDEO_ARY = (!ar) ? ((status[2])  ? 8'd7 : 8'd10) : 12'd0;
+
+
 //                          8   9   A   B   C   D   E   F
 //_________________________________________________________
 //	DIP SWITCH #1			  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
@@ -264,24 +260,30 @@ assign VIDEO_ARY = (!ar) ? ((status[2])  ? 8'd7 : 8'd10) : 12'd0;
 
 // Status Bit Map:
 //              Upper                          Lower
-// 0         1         2         3          4         5         6
-// 01234567890123456789012345678901 23456789012345678901234567890123
-// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-//    XXX  XXXXXXXXXXX
+//      0         1         2         3          4         5         6
+//      01234567890123456789012345678901 23456789012345678901234567890123
+//      0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
+// RST  X
+// ROT    X
+//          XXXXX
+//		           XXXXXXXXXX
+//                         X       
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"A.EXERION;;",
-	"H0OJK,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"H1H0O2,Orientation,Vert,Horz;",
-	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"P1,Video Settings;",
+   "P1O[20:19],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+   "P1O[5:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+   "P1O[7:6],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+   "P1O[2],Orientation,Vert,Horz;",	 
 	"-;",
 	"DIP;",
 	"-;",
-	"H1OS,Autosave Hiscores,Off,On;",
-	"P1,Pause options;",
-	"P1OP,Pause when OSD is open,On,Off;",
-	"P1OQ,Dim video after 10s,On,Off;",
+	"O[28],Autosave Hiscores,Off,On;",
+	"P3,Pause options;",
+	"P3O[25],Pause when OSD is open,On,Off;",
+	"P3O[26],Dim video after 10s,On,Off;",
 	"-;",
 	"R0,Reset;",
 	"J1,Fire,Fast Fire,Start 1P,Start 2P,Coin,Pause;",
@@ -333,17 +335,19 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 ////////////////////   CLOCKS   ///////////////////
 
-wire clkmain;
-wire clk_53p28;
-wire clk_sys=clkmain;//clkm_20MHZ;
-wire clk_vid;//=clkm_20MHZ;
+//wire clkmain;
+wire clk_53p28,clkm_20MHZ;
+wire clk_sys=clk_sys40;//clkm_20MHZ;
+wire clk_vid=clk_53p28;//=clkm_20MHZ;
 //reg ce_pix;
+wire clk_sys40;
+//wire clk_sys;
 
 pll pll(
 		.refclk(CLK_50M),  			// refclk.clk FPGA_CLK1_50
 		.rst(0),            			// reset.reset
-		.outclk_0(clkmain),     // outclk0.clk = 20Mhz
-		.outclk_1(clk_vid),        // outclk1.clk = 40Mhz
+		.outclk_0(clkm_20MHZ),     	// outclk0.clk = 20Mhz
+		.outclk_1(clk_sys40),      // outclk1.clk = 40Mhz
 		.outclk_2(clk_53p28),		// outclk2.clk = 53.28Mhz
 		.outclk_3()
 );
@@ -361,10 +365,10 @@ wire m_pause  		= joystick_0[9];
 
 ///////////////////   CLOCK DIVIDER   ////////////////////
 
-always @(posedge clk_vid) begin
-	reg [1:0] div;
-	div <= div + (forced_scandoubler ? 2'd1 : 2'd2);
-end
+//always @(posedge clk_vid) begin
+//	reg [1:0] div;
+//	div <= div + (forced_scandoubler ? 2'd1 : 2'd2);
+//end
 
 ///////////////////   VIDEO   ////////////////////
 wire hblank, vblank;
@@ -376,16 +380,23 @@ wire [1:0] b;
 
 wire [7:0] rgb = {rgb_out[7:5],rgb_out[4:2],rgb_out[1:0]};//23:0
 
-wire no_rotate = status[2] | direct_video;
+wire no_rotate = (status[2] | direct_video);
+wire rotate = !no_rotate;
 wire rotate_ccw = 0;
 wire flip = 0;
 wire core_pix_clk;
 
 screen_rotate screen_rotate (.*);
 
+wire [2:0] scandoubler_fx = status[5:3];
+wire [1:0] ar = status[20:19];
+wire [1:0] scale = status[7:6];
+wire VGA_DE_MIXER;
+
 arcade_video #(388,8) arcade_video //  8 : 3R 3G 2B
 (
 	.*,
+	
 	.clk_video(clk_vid),
 	.ce_pix(core_pix_clk),
 	.RGB_in(rgb),
@@ -393,7 +404,32 @@ arcade_video #(388,8) arcade_video //  8 : 3R 3G 2B
 	.VBlank(vblank),
 	.HSync(hs),
 	.VSync(vs),
-	.fx(status[5:3])
+
+	.VGA_DE(VGA_DE_MIXER),
+	
+	.fx(scandoubler_fx),
+	.forced_scandoubler(forced_scandoubler),
+	.gamma_bus(gamma_bus)
+	
+
+);
+
+
+video_freak video_freak(
+    .CLK_VIDEO(CLK_VIDEO),
+    .CE_PIXEL(CE_PIXEL),
+    .VGA_VS(VGA_VS),
+    .HDMI_WIDTH(HDMI_WIDTH),
+    .HDMI_HEIGHT(HDMI_HEIGHT),
+    .VGA_DE(VGA_DE),
+    .VIDEO_ARX(VIDEO_ARX),
+    .VIDEO_ARY(VIDEO_ARY),
+    .VGA_DE_IN(VGA_DE_MIXER),
+	 .ARX((!ar) ? (no_rotate ? 8'd10 : 8'd7) : (ar - 1'd1)),
+	 .ARY((!ar) ? (no_rotate ? 8'd7 : 8'd10) : 12'd0),
+    .CROP_SIZE(0),
+    .CROP_OFF(0),
+    .SCALE(scale)
 );
 
 // PAUSE SYSTEM
@@ -447,7 +483,8 @@ wire reset = (RESET | status[0] | buttons[1]);
 assign LED_USER = ioctl_download;
 
 exerion_fpga excore(
-	.clk_sys(clkmain),
+	.clk_sys(clkm_20MHZ),
+	.clk_sys40(clk_sys40),
 	.clkaudio(clk_53p28),
 	.RED(r),
 	.GREEN(g),
@@ -466,7 +503,7 @@ exerion_fpga excore(
 	.dn_data(ioctl_dout),
 	.dn_wr(ioctl_wr && !ioctl_index), //& rom_download
 	.audio_l(AUDIO_L),
-	.audio_r(AUDIO_R),
+	//.audio_r(AUDIO_R),
 	.hs_address(hs_address),
 	.hs_data_out(hs_data_out),
 	.hs_data_in(hs_data_in),

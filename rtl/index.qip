@@ -1,4 +1,5 @@
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "excore.v"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "exer_background.v"]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "exer_ram.v"]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "exer_roms.v"]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) "rom_loader.sv"]
