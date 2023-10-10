@@ -13,7 +13,7 @@
 `timescale 1ns/1ps
 
 module exerion_fpga(
-	input clk_sys,
+	input clk_sys,   //clkm_20MHZ
 	input clk_sys40,
 	input	clkaudio,
 	output [2:0] RED,     	//from fpga core to sv
@@ -32,8 +32,8 @@ module exerion_fpga(
 	input [24:0] dn_addr,
 	input 		 dn_wr,
 	input [7:0]  dn_data,
-	output [15:0] audio_l,  //from jt49_1 .sound
-	//output signed [15:0] audio_r,  //from jt49_2 .sound
+	output signed [15:0] audio_l,  //from jt49_1 .sound
+	output signed [15:0] audio_r,  //from jt49_2 .sound
 	input [15:0] hs_address,
 	output [7:0] hs_data_out,
 	input [7:0] hs_data_in,
@@ -46,8 +46,7 @@ reg [7:0] pixV = 8'b00000000;
 
 reg [8:0] rpixelbusH;
 reg [7:0] rpixelbusV;
-wire [10:0] vramaddr;
-wire RAMA_WR,RAMB_WR; 
+reg [10:0] vramaddr;
 
 wire 	[7:0] u6k_data; //foreground character ROM output data
 reg 	[7:0] u7K_data;
@@ -153,19 +152,11 @@ buf (clk3_3MHZ,U2B_Bnq);	//3.33Mhz Clock
 wire Z80_MREQ,Z80_WR,Z80_RD;
 
 //coin input
-wire nCOIN;
+reg nCOIN;
 
 assign core_pix_clk=clk2_6MHZ;
 
-//coin
-ttl_7474 #(.BLOCKS(1), .DELAY_RISE(0), .DELAY_FALL(0)) U1D_A (
-	.n_pre(PUR),
-	.n_clr(PUR),
-	.d(!m_coin),
-	.clk(nVDSP),
-	.q(),
-	.n_q(nCOIN)
-);
+always @(posedge nVDSP) nCOIN <= m_coin;
 
 //First Z80 CPU responsible for main game logic, sound, sprites
 T80pa Z80A(
@@ -206,14 +197,6 @@ always @(*) begin
 
 end
 
-
-//always @(*) begin
-
-//end
-
-assign RAMA_WR = RAMA|Z80_WR;
-assign RAMB_WR = RAMB|Z80_WR;
-
 //CPU data bus read selection logic
 // **Z80A* PRIMARY CPU IC SELECTION LOGIC FOR TILE, SPRITE, SOUND & GAME EXECUTION ********
 always @(posedge clk_sys) begin
@@ -227,12 +210,15 @@ always @(posedge clk_sys) begin
 									(!IOA1 & IOA0)			? 	AY_12F_databus_out :
 									(!IOA3 & IOA2)			? 	AY_12V_databus_out :
 																8'b00000000;
+		RAMA_WR <= RAMA|Z80_WR;
+		RAMB_WR <= RAMB|Z80_WR;
+
 end									
 
+wire wait_n;
+reg RAMA_WR,RAMB_WR;
 
-wire wait_n = !pause;
-
-
+assign	wait_n = !pause;
 
 
 //Z80A CPU main program program ROM
@@ -260,7 +246,7 @@ dpram_dc #(.widthad_a(11)) U4N_Z80A_RAM
 	.data_a(Z80A_databus_out),
 	.wren_a(!Z80_WR & !ZA_RAM),
 	.q_a(U4N_Z80A_RAM_out),
-	
+
 	.clock_b(clk_sys40),
 	.address_b(hs_address[10:0]),
 	.data_b(hs_data_in),
@@ -276,16 +262,25 @@ ls138x U9R(
   .Y(U9R_Q) //U9R_Q4, U9R_Q5
 );
 
+reg SNHI,rSSEL;
+reg [12:0] fgramaddr;
+//wire
+//assign	
+always @(posedge clk_sys) begin
+ SNHI 			<= ((pixH[8:6]==3'b111)&!nVDSP) ? 1'b0 : 1'b1;
+ rSSEL 			<= U9R_Q[4]|nVDSP;  //used to load the per line memory location for the background layer -> SIGNAL TO BACKGROUND LAYER
 
+end
 
-wire SNHI = ((pixH[8:6]==3'b111)&!nVDSP) ? 1'b0 : 1'b1;
-assign	vramaddr = (RAMA) ? {rpixelbusV[7:3],rpixelbusH[8:3]} : Z80A_addrbus[10:0];
+always @(*)  vramaddr 		<= (RAMA) ? {rpixelbusV[7:3],rpixelbusH[8:3]} : Z80A_addrbus[10:0];
+always @(*)  fgramaddr  	<= {char_ROMA12,vramdata0out[7:4],rpixelbusV[2:0],vramdata0out[3:0],rpixelbusH[2]};
+always @(*)  fglayeraddr	<= {U8L_A7,U8L_A6,U8K[1:0],U7L[3:0]};
 
 //VRAM
 m6116_ram U6N_VRAM(
 	.data(Z80A_databus_out),
 	.addr(vramaddr),
-	.clk(clk_sys40),
+	.clk(clk_sys),
 	.cen(1'b1),
 	.nWE(RAMA_WR),
 	.q(U6N_VRAM_Q)
@@ -296,8 +291,8 @@ always @(negedge pixH[2]) vramdata0out<=U6N_VRAM_Q;
 //foreground character ROM
 eprom_7 u6k
 (
-	.ADDR({char_ROMA12,vramdata0out[7:4],rpixelbusV[2:0],vramdata0out[3:0],rpixelbusH[2]}),//
-	.CLK(clk_sys40),//
+	.ADDR(fgramaddr),//
+	.CLK(clk_sys),//
 	.DATA(u6k_data),//
 	.ADDR_DL(dn_addr),
 	.CLK_DL(clk_sys40),//
@@ -310,6 +305,7 @@ eprom_7 u6k
 
 reg [3:0] U7L;
 reg [1:0] U8K;
+reg [7:0] fglayeraddr;
 
 always @(negedge pixH[1]) begin
 	u7K_data <= u6k_data ;
@@ -325,17 +321,18 @@ always @(posedge clk_sys) begin //U5J
 	endcase
 end
 
+
 //foreground / text / bullet layer output
 prom6301_L8 UL8(
-	.addr({U8L_A7,U8L_A6,U8K[1:0],U7L[3:0]}),
-	.clk(clk_sys40),
+	.addr(fglayeraddr),
+	.clk(clk_sys),
 	.n_cs(1'b0), 
 	.q(ZA)
 );
 
 
 
-wire rSSEL;
+//wire rSSEL;
 
 reg r2UP,nr2UP; //player 2 active (flips controls & screen logic)
 
@@ -377,7 +374,7 @@ always @(posedge clk2_6MHZ) begin
 end
 
 
-assign	rSSEL 	= U9R_Q[4]|nVDSP;  //used to load the per line memory location for the background layer -> SIGNAL TO BACKGROUND LAYER
+
 
 always @(posedge clk_sys) begin
   if (r2UP) begin
@@ -404,8 +401,7 @@ m2114_ram U11SR(
 );
 
 
-reg [3:0] U11H_cnt;
-reg [3:0] U12H_cnt;
+reg [3:0] U11H_cnt,U12H_cnt;
 
 wire sROM_bitA, sROM_bitB, sROM_A0, sROM_A1;
 
@@ -414,7 +410,7 @@ assign sROM_bitB = (BIG2) ? U11H_cnt[2]^UDINV2 : U11H_cnt[1]^UDINV2; //10J
 assign sROM_A0 =   (BIG1) ? U12H_cnt[3]^UDINV1 : U12H_cnt[2]^UDINV1; //12J
 assign sROM_A1 =   (BIG1) ?       UDPNT^UDINV1 : U12H_cnt[3]^UDINV1; //12J
 
-always @(posedge P3) begin			//U12L
+always @(posedge P[3]) begin			//U12L
 	CHLF<=rSPRITE_databus[7];
 	sROM_A11<=rSPRITE_databus[6];
 	sROM_A10<=rSPRITE_databus[5];
@@ -466,8 +462,7 @@ prom6301_H10 U10H(
 	.q({U10H_data})
 );
 
-reg [3:0] spbitdata_10;
-reg [3:0] spbitdata_11;
+reg [3:0] spbitdata_10,spbitdata_11;
 
 reg U9H_A_nq,U9F_A_q,U9F_B_nq;
 wire U9H_d;
@@ -482,7 +477,6 @@ always @(posedge clksp_10MHZ) begin
 	spbitdata_10 <= (rpixelbusV[0]) ? U10H_data :4'b0000 ;
 end
 
-
 always @(posedge U10nRCO or negedge RAMB or negedge spRAMsel) U9F_A_q <= 	(!RAMB) ?	1'b1 : (!spRAMsel) ? 1'b0 : spRAMsel;
 always @(posedge spnH4CA or negedge RAMB) U9F_B_nq <= 	~((!RAMB) ?	1'b1 : spnH8CA);
 
@@ -493,23 +487,18 @@ assign  U12_sum = {1'b0, rSPRITE_databus} + {1'b0, rpixelbusV} + 1'b1;
 //sprite control signals
 reg U12P_H0,U12P_CA0,U12P_CA1,U12P_Y2,U12P_BIG,U12P_UDPNT,U12P_RLINV,U12P_UDINV;
 reg BIG1,UDINV1,sum1,sum2,sum3,sum4,UDPNT;
-reg BIG2,UDINV2,ERS,CD3,CD2,CD1,CD0;
+reg BIG2,UDINV2,ERS,CD3,CD2,CD1,CD0,U11V_ZB,CAD9;
+reg [7:0] U12_Q;
 
-always @(posedge P1) {U12P_UDINV,U12P_RLINV,U12P_UDPNT,U12P_BIG,U12P_Y2,U12P_CA1,U12P_CA0,U12P_H0} <= rSPRITE_databus; //U12P
-always @(posedge P3) {sum4,sum3,sum2,sum1,UDPNT,BIG1,UDINV1} <= {U12U_Q[3]^U12P_RLINV,U12U_Q[2]^U12P_RLINV,U12U_Q[1]^U12P_RLINV,U12U_Q[0]^U12P_RLINV,U12P_UDPNT,U12P_BIG,U12P_UDINV}; //U10N
-always @(posedge P4) {UDINV2,BIG2,ERS,CD3,CD2,CD1,CD0} <= {U12P_UDINV,U12P_BIG,U11V_ZB,CHDN,CHLF,U12P_CA1,U12P_CA0}; //U10P
+always @(posedge P[1]) {U12P_UDINV,U12P_RLINV,U12P_UDPNT,U12P_BIG,U12P_Y2,U12P_CA1,U12P_CA0,U12P_H0} <= rSPRITE_databus; //U12P
+always @(negedge P[2]) U12_Q <= (U12P_BIG) ? {1'b0,U12_sum[7:1]} : U12_sum[7:0]; //U12U
+always @(posedge P[3]) {sum4,sum3,sum2,sum1,UDPNT,BIG1,UDINV1} <= {U12_Q[3]^U12P_RLINV,U12_Q[2]^U12P_RLINV,U12_Q[1]^U12P_RLINV,U12_Q[0]^U12P_RLINV,U12P_UDPNT,U12P_BIG,U12P_UDINV}; //U10N
+always @(posedge P[4]) {UDINV2,BIG2,ERS,CD3,CD2,CD1,CD0} <= {U12P_UDINV,U12P_BIG,U11V_ZB,CHDN,CHLF,U12P_CA1,U12P_CA0}; //U10P
 
-reg [3:0] U12U_Q;
-reg [3:0] U12T_Q;
 
-always @(negedge P2) begin
-	U12U_Q <= (U12P_BIG) ? {U12_sum[4:1]} 			: U12_sum[3:0]; //U12U
-	U12T_Q <= (U12P_BIG) ? {1'b0,U12_sum[7:5]}	: U12_sum[7:4]; //U12T
-end
 
-reg U11V_ZB,CAD9;
 
-always @(U12P_Y2,U12T_Q,U12P_RLINV,rSPRITE_databus) {U11V_ZB,CAD9} <= (U12P_Y2) ? {U12T_Q[1]|U12T_Q[2]|U12T_Q[3],U12T_Q[0]^U12P_RLINV} : {U12T_Q[0]|U12T_Q[1]|U12T_Q[2]|U12T_Q[3],rSPRITE_databus[4]}; //U11V
+always @(*) {U11V_ZB,CAD9} <= (U12P_Y2) ? {|U12_Q[7:5],U12_Q[4]^U12P_RLINV} : {|U12_Q[7:4],rSPRITE_databus[4]}; //U11V
 
 reg sp10_UD,sp10_nLD,sp10_CK,sp10_WE;
 reg sp11_UD,sp11_nLD,sp11_CK,sp11_WE;
@@ -543,21 +532,23 @@ wire [3:0] spram_out_10;
 wire [3:0] spram_out_11;
 
 always @(posedge clk2_6MHZ) {ZB} <= (rpixelbusV[0]) ? {spram_out_11} : {spram_out_10}; //U9A
+always @(negedge clksp_10MHZ) U10nRCO=!(&spramaddr_cnt[3:0]);
+
+reg [4:0] P;
 
 always @(negedge clksp_10MHZ) begin
-	U10nRCO<=!(spramaddr_cnt[0]&spramaddr_cnt[1]&spramaddr_cnt[2]&spramaddr_cnt[3]);
+	 if (spramaddr_cnt[1:0]==2'b10) begin
+		case (spramaddr_cnt[3:2])
+		  2'b00: P[4:1]=4'b1110;
+		  2'b01: P[4:1]=4'b1101;
+		  2'b10: P[4:1]=4'b1011;
+		  2'b11: P[4:1]=4'b0111;
+		endcase
+	 end
+	 else begin //
+		P[4:1] = 4'b1111;
+	 end
 end
-
-wire P4,P3,P2,P1;
-wire U10U_Q4,U10U_Q5,U10U_Q6,U10U_Q7;
-
-ls138x U10U( //#(.WIDTH_OUT(8), .DELAY_RISE(0), .DELAY_FALL(0)) 
-  .nE1(clksp_10MHZ), //clk1_10MHZ
-  .nE2(spramaddr_cnt[0]), //
-  .E3(spramaddr_cnt[1]), //
-  .A({1'b0,spramaddr_cnt[3:2]}), //
-  .Y({U10U_Q7,U10U_Q6,U10U_Q5,U10U_Q4,P4,P3,P2,P1})
-);
 
 always @(posedge clksp_10MHZ) begin
 
@@ -565,13 +556,13 @@ always @(posedge clksp_10MHZ) begin
 //U10J     - Takes the output of U11H and switches the output based on signal 'BIG2'
 //U9JA & D - The outputs of U10J are XORed with control signal 'UDINV2'
 
-	U11H_cnt <= (!P4) ? 4'b0000 : U11H_cnt2;
+	U11H_cnt <= (!P[4]) ? 4'b0000 : U11H_cnt2;
 	
 //U12H - 161 counter that increments on the 10Mhz clock and is reset to 0 by P3, this can be a simple add counter
 //U12J     - Takes the output of U12H and UDPNT and switches the output based on signal 'BIG1'
 //U9JC & B - The outputs of U12J are XORed with control signal 'UDINV1	'
 
-	U12H_cnt <= (!P3) ? 4'b0000 : U12H_cnt2;
+	U12H_cnt <= (!P[3]) ? 4'b0000 : U12H_cnt2;
 
 //Sprite RAM address selection logic
 	spRAMbit0 <= (!spRAMsel) ? U12P_H0 : 1'b0; //U10S_QB 
@@ -579,7 +570,11 @@ always @(posedge clksp_10MHZ) begin
 	spramaddr_cntz3 <= spramaddr_cntz2; //spramaddr_cntz2;
 end
 
-
+always @(posedge clksp_10MHZn) begin
+	U11H_cnt2 <= (!P[4]) ? 4'b0000 : U11H_cnt+4'd1;
+	U12H_cnt2 <= (!P[3]) ? 4'b0000 : U12H_cnt+4'd1;
+end
+	
 reg spRAMbit0;
 reg spRAMsel;
 
@@ -591,8 +586,7 @@ reg [9:0] spramaddr_cntz3 ;
 
 always @(*)/*posedge clksp_20MHZclkm_20MHZ) */ begin
 	rSPRITE_databus <= (!spRAMsel) ? ((!RAMB_WR) ? Z80A_databus_out : U11SR_SPRAM_Q) : ({r2UP,1'b0,r2UP,r2UP,1'b0,r2UP,1'b0,1'b0}) ;
-	U11H_cnt2 <= (!P4) ? 4'b0000 : U11H_cnt+4'd1;
-	U12H_cnt2 <= (!P3) ? 4'b0000 : U12H_cnt+4'd1;
+
 	spramaddr_cntz2 <= spramaddr_cnt+10'b0000000001;
 	spramaddr_cnt   <= (U9F_B_nq) ?  10'b0000000000 : (!RAMB) ? ({1'b0,Z80A_addrbus[6:0],1'b0,1'b0}) : spramaddr_cntz3 ; 	
 
@@ -685,12 +679,12 @@ jtframe_jt49_filters u_filters1(
             .din0   ( sound_outF ),
             .din1   ( sound_outV ), //sound_outAY3 - {1'b0,AY1_IOA_out,1'b0}
             .sample ( AY12F_sample  ), //AY12F_sample
-            .dout   ( audio_l    )
+            .dout   ( audio_snd    )
 );
 
-//assign audio_l = (pause) ? 16'd0 : audio_snd;
-//assign audio_r = (pause) ? 16'd0 : audio_snd;
-		  
+assign audio_l = (pause) ? 16'd0 : audio_snd;
+assign audio_r = (pause) ? 16'd0 : audio_snd;
+
 reg [7:0] tmrmask ;//= 8'b00000000;
 reg [2:0] tmrcounter;
 reg [2:0] tmrcnt2;

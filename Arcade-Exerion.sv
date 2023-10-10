@@ -181,7 +181,7 @@ assign VGA_DISABLE = 0;
 assign FB_FORCE_BLANK = 0;
 
 assign AUDIO_S = 1;//signed for audio out
-assign AUDIO_MIX = 3;
+assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;
 assign LED_POWER = 0;
@@ -503,7 +503,7 @@ exerion_fpga excore(
 	.dn_data(ioctl_dout),
 	.dn_wr(ioctl_wr && !ioctl_index), //& rom_download
 	.audio_l(AUDIO_L),
-	//.audio_r(AUDIO_R),
+	.audio_r(AUDIO_R),
 	.hs_address(hs_address),
 	.hs_data_out(hs_data_out),
 	.hs_data_in(hs_data_in),
