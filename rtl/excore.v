@@ -199,7 +199,7 @@ end
 
 //CPU data bus read selection logic
 // **Z80A* PRIMARY CPU IC SELECTION LOGIC FOR TILE, SPRITE, SOUND & GAME EXECUTION ********
-always @(posedge clk_sys) begin
+always @(posedge clkaudio) begin
 		Z80A_databus_in <= 	(!ZA_ROM&!Z80_MREQ)	? 	prom_prog1_out :
 									(!ZA_RAM & !Z80_RD)  ? 	U4N_Z80A_RAM_out :
 									(!Z80_RD & !RAMA)		?  U6N_VRAM_Q : 		//VRAM
@@ -272,21 +272,23 @@ always @(posedge clk_sys) begin
 
 end
 
-always @(*)  vramaddr 		<= (RAMA) ? {rpixelbusV[7:3],rpixelbusH[8:3]} : Z80A_addrbus[10:0];
-always @(*)  fgramaddr  	<= {char_ROMA12,vramdata0out[7:4],rpixelbusV[2:0],vramdata0out[3:0],rpixelbusH[2]};
-always @(*)  fglayeraddr	<= {U8L_A7,U8L_A6,U8K[1:0],U7L[3:0]};
+always @(posedge clkaudio)  vramaddr 		<= (RAMA) ? {rpixelbusV[7:3],rpixelbusH[8:3]} : Z80A_addrbus[10:0];
+
+always @(posedge clkaudio)  fglayeraddr	<= {U8L_A7,U8L_A6,U8K[1:0],U7L[3:0]};
 
 //VRAM
 m6116_ram U6N_VRAM(
 	.data(Z80A_databus_out),
 	.addr(vramaddr),
-	.clk(clk_sys),
+	.clk(clkaudio),
 	.cen(1'b1),
 	.nWE(RAMA_WR),
 	.q(U6N_VRAM_Q)
 );	
 
-always @(negedge pixH[2]) vramdata0out<=U6N_VRAM_Q;
+always @(negedge pixH[2]) vramdata0out<=U6N_VRAM_Q; //pixH[2]
+always @(*)  fgramaddr  	<= {char_ROMA12,vramdata0out[7:4],rpixelbusV[2:0],vramdata0out[3:0],rpixelbusH[2]};
+
 
 //foreground character ROM
 eprom_7 u6k
