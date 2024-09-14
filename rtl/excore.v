@@ -14,8 +14,8 @@
 
 module exerion_fpga(
 	input clk_sys,   //clkm_20MHZ
-	input clk_sys40,
-	input	clkaudio,
+	input clk_sys40, //clk_sys40
+	input	clkaudio,  //clk_53p28
 	output [2:0] RED,     	//from fpga core to sv
 	output [2:0] GREEN,		//from fpga core to sv
 	output [1:0] BLUE,		//from fpga core to sv
@@ -184,7 +184,7 @@ reg ZA_ROM, ZA_RAM, RAMA, RAMB, IN1, IN2, IN3, IO1, IO2, AY1, AY2;
 always @(*) begin
 	ZA_ROM 	= ((Z80A_addrbus[15:13] == 3'b000)|(Z80A_addrbus[15:13] == 3'b001)|(Z80A_addrbus[15:13] == 3'b010))	
 																			? 1'b0 : 1'b1; //0000 - 5FFF - Main Program ROM
-	ZA_RAM 	= (Z80A_addrbus[15:13] == 3'b011)				? 1'b0 : 1'b1; //6000 - 7FFF - Main Program ROM
+	ZA_RAM 	= (Z80A_addrbus[15:13] == 3'b011)				? 1'b0 : 1'b1; //6000 - 7FFF - Main Program RAM
 	RAMA		= (Z80A_addrbus[15:11] == 5'b10000)				? 1'b0 : 1'b1; //8000 - 87FF
 	RAMB		= (Z80A_addrbus[15:11] == 5'b10001)				? 1'b0 : 1'b1; //8800 - 8FFF
 	IN1	  	= (Z80A_addrbus[15:11] == 5'b10100)				? 1'b0 : 1'b1; //A000
@@ -274,7 +274,7 @@ end
 
 always @(posedge clkaudio)  vramaddr 		<= (RAMA) ? {rpixelbusV[7:3],rpixelbusH[8:3]} : Z80A_addrbus[10:0];
 
-always @(posedge clkaudio)  fglayeraddr	<= {U8L_A7,U8L_A6,U8K[1:0],U7L[3:0]};
+always @(posedge clkaudio)  fglayeraddr	<= {U8L_A76[1:0],U8K[1:0],U7L[3:0]};
 
 //VRAM
 m6116_ram U6N_VRAM(
@@ -287,7 +287,7 @@ m6116_ram U6N_VRAM(
 );	
 
 always @(negedge pixH[2]) vramdata0out<=U6N_VRAM_Q; //pixH[2]
-always @(*)  fgramaddr  	<= {char_ROMA12,vramdata0out[7:4],rpixelbusV[2:0],vramdata0out[3:0],rpixelbusH[2]};
+always @(posedge clk_sys)  fgramaddr  	<= {char_ROMA12,vramdata0out[7:4],rpixelbusV[2:0],vramdata0out[3:0],rpixelbusH[2]};
 
 
 //foreground character ROM
@@ -341,16 +341,15 @@ reg r2UP,nr2UP; //player 2 active (flips controls & screen logic)
 wire [8:0] pixHcntz;
 wire [7:0] pixVcntz;
 
-reg char_ROMA12, U8L_A6, U8L_A7, CD4,CD5;
+reg char_ROMA12 ;
+reg [1:0] U8L_A76,CD54;
 
 always @(posedge IO1) begin
 	r2UP<=Z80A_databus_out[0];			//screen inversion for player 2
 	nr2UP<=!Z80A_databus_out[0];
-	U8L_A6<=Z80A_databus_out[1];
-	U8L_A7<=Z80A_databus_out[2];
+	U8L_A76[1:0]<=Z80A_databus_out[2:1];
 	char_ROMA12<=Z80A_databus_out[3];
-	CD4<=Z80A_databus_out[6];
-	CD5<=Z80A_databus_out[7];
+	CD54[1:0]<=Z80A_databus_out[7:6];
 end
 
 reg [7:0] Z80A_IO2;
@@ -458,7 +457,7 @@ end
 wire [3:0] U10H_data;
 
 prom6301_H10 U10H(
-	.addr({CD5,CD4,U11J[1:0],CD3,CD2,CD1,CD0}),
+	.addr({CD54[1:0],U11J[1:0],CD3,CD2,CD1,CD0}),
 	.clk(clk_sys40),
 	.n_cs(1'b0), 
 	.q({U10H_data})
