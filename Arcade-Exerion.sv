@@ -12,6 +12,24 @@
 //============================================================================
 
 
+//============================================================================
+//
+//  This program is free software; you can redistribute it and/or modify it
+//  under the terms of the GNU General Public License as published by the Free
+//  Software Foundation; either version 2 of the License, or (at your option)
+//  any later version.
+//
+//  This program is distributed in the hope that it will be useful, but WITHOUT
+//  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+//  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+//  more details.
+//
+//  You should have received a copy of the GNU General Public License along
+//  with this program; if not, write to the Free Software Foundation, Inc.,
+//  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//
+//============================================================================
+
 module emu
 (
 	//Master input clock
@@ -50,6 +68,7 @@ module emu
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
 	output        HDMI_FREEZE,
+	output        HDMI_BLACKOUT,
 
 `ifdef MISTER_FB
 	// Use framebuffer in DDRAM
@@ -93,7 +112,7 @@ module emu
 	// b[0]: osd button
 	output  [1:0] BUTTONS,
 
-	input         CLK_AUDIO, // 24.576 MHz 
+	input         CLK_AUDIO, // 24.576 MHz
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
 	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
@@ -168,33 +187,40 @@ module emu
 );
 
 ///////// Default values for ports not used in this core /////////
+
 assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
-wire [15:0] sdram_sz;
+//assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
+
+//assign VGA_SL = 0;
 assign VGA_F1 = 0;
-assign VGA_SCALER = 0;
-assign HDMI_FREEZE = 0;
+//assign VGA_SCALER  = 0;
 assign VGA_DISABLE = 0;
-assign FB_FORCE_BLANK = 0;
+assign HDMI_FREEZE = 0;
+assign HDMI_BLACKOUT = 0;
 
 assign AUDIO_S = 1;//signed for audio out
+//assign AUDIO_L = 0;
+//assign AUDIO_R = 0;
 assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;
 assign LED_POWER = 0;
 assign BUTTONS = 0;
 
+wire [15:0] sdram_sz;
 //copy dip switch setting for DIP menu
 reg [7:0] sw[8];
 always @(posedge clk_sys) if (ioctl_wr && (ioctl_index==254) && !ioctl_addr[24:3]) sw[ioctl_addr[2:0]] <= ioctl_dout;
 
 ////////////////////   HPS   /////////////////////
 
-wire [31:0] status;
+wire [127:0] status;
 wire  [1:0] buttons;
+wire  [10:0] ps2_key;
 wire        forced_scandoubler;
 wire        direct_video;
 wire        video_rotated;
@@ -309,13 +335,13 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
 	.EXT_BUS(),
-
+	.gamma_bus(gamma_bus),
+	
 	.buttons(buttons),
 	.status(status),
 	.status_menumask({~hs_configured,direct_video}),
 
 	.forced_scandoubler(forced_scandoubler),
-	.gamma_bus(gamma_bus),
 	.direct_video(direct_video),
 	.video_rotated(video_rotated),
 
@@ -330,7 +356,9 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_wait(ioctl_wait),
 
 	.sdram_sz(sdram_sz),
-	.joystick_0(joystick_0)
+	.joystick_0(joystick_0),
+	
+	.ps2_key(ps2_key)
 );
 
 ////////////////////   CLOCKS   ///////////////////
@@ -393,7 +421,7 @@ wire [1:0] ar = status[20:19];
 wire [1:0] scale = status[7:6];
 wire VGA_DE_MIXER;
 
-arcade_video #(388,8) arcade_video //  8 : 3R 3G 2B
+arcade_video #(388,8,1) arcade_video //  8 : 3R 3G 2B
 (
 	.*,
 	
