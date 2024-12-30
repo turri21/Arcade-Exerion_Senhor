@@ -1,3 +1,8 @@
+-=(Exerion_Senhor notes)=-
+
+Tested: Working Video 720p, 1080p & Sound
+
+___
 # EXERION
 KiCAD PCB schematic & FPGA core for the MiSTer platform developed by Anton Gale.
 
